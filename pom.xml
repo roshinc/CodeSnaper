@@ -84,31 +84,7 @@
             <version>${log4j.version}</version>
         </dependency>
 
-        <!-- Nimbus Libraries -->
-        <dependency>
-            <groupId>gov.nystax.nimbus.tools.get2git</groupId>
-            <artifactId>get2git</artifactId>
-            <version>1.1.4</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.logging.log4j</groupId>
-                    <artifactId>log4j-core</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.logging.log4j</groupId>
-                    <artifactId>log4j-slf4j-impl</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.logging.log4j</groupId>
-                    <artifactId>log4j-api</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>gov.nystax.nimbus.tools.problems4tools</groupId>
-            <artifactId>problems4tools</artifactId>
-            <version>1.0.0</version>
-        </dependency>
+        
 
         <!-- JUnit 5 for testing -->
         <dependency>

@@ -1,7 +1,6 @@
 package gov.nystax.nimbus.codesnap.util;
 
-import gov.nystax.nimbus.tools.problems.base.Preconditions;
-import gov.nystax.nimbus.tools.problems.exceptions.base.ProblemsIllegalArgumentException;
+import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,9 +24,8 @@ public class FileUtils {
      *
      * @param path the Path to check
      * @return true if the Path is not empty, false otherwise
-     * @throws ProblemsIllegalArgumentException
      */
-    public static boolean isPathNotEmpty(Path path) throws ProblemsIllegalArgumentException {
+    public static boolean isPathNotEmpty(Path path) {
 
         Preconditions.checkNotNull(path, "Provided path is null.");
         Preconditions.checkArgument(Files.exists(path), "Cannot check a path that doesnt exist: %s", path);

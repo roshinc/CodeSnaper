@@ -6,7 +6,6 @@ import gov.nystax.nimbus.codesnap.util.FileUtils;
 import gov.nystax.nimbus.tools.get2git.GitRepositoryAccessor;
 import gov.nystax.nimbus.tools.get2git.domain.GitConfig;
 import gov.nystax.nimbus.tools.get2git.domain.GitRepoURL;
-//import gov.nystax.nimbus.tools.problems.exceptions.base.ProblemsIllegalArgumentException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,7 +103,7 @@ public class GitService {
     }
 
 
-    private boolean doesLocalServiceExists(Path localServicePomPath) throws ProblemsIllegalArgumentException {
+    private boolean doesLocalServiceExists(Path localServicePomPath) {
         if (isPathNotEmpty(localServicePomPath)) {
             logger.debug("The local pom.xml file @ [{}] exists", localServicePomPath);
             return true;

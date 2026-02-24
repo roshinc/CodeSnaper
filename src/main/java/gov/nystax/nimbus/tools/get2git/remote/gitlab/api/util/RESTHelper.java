@@ -31,6 +31,8 @@ import gov.nystax.nimbus.tools.get2git.remote.gitlab.api.domain.response.RESTRes
  */
 public class RESTHelper {
 
+	private static final Logger logger = LoggerFactory.getLogger(RESTHelper.class);
+
 	/**
 	 * Does a get request and returns the string output.
 	 * <p>
@@ -147,9 +149,6 @@ public class RESTHelper {
 			final Map<String, String> parameters, final Map<String, String> headers,
 			HttpRequest.BodyPublisher publisher) throws G2GClientException {
 
-		// Create logger
-		Logger logger = LoggerFactory.getLogger(RESTHelper.class);
-
 		// Append parameters
 		String modifiedURL = String.format("%s?%s", urlString, ParameterStringBuilder.getParamsString(parameters));
 
@@ -244,9 +243,6 @@ public class RESTHelper {
 	private static <T> RESTResponse<T> doGetInternal(final String urlString, final Map<String, String> parameters,
 			final Map<String, String> headers, final boolean asBytes) throws G2GClientException, G2GRestException {
 
-		// Create logger
-		Logger logger = LoggerFactory.getLogger(RESTHelper.class);
-
 		// create response object
 		RESTResponse<T> response = new RESTResponse<T>();
 
@@ -257,8 +253,7 @@ public class RESTHelper {
 		// Build request
 		HttpRequest request = requestBuilder.build();
 
-		System.out.println("Make a " + request.method() + " request to " + request.uri().toString());
-		logger.info("Make a {} request to {}", request.method(), request.uri().toString());
+		logger.info("Make a {} request to {}", request.method(), request.uri());
 
 		// Create client
 		HttpClient.Builder clientBuilder = HttpClient.newBuilder();
@@ -280,9 +275,6 @@ public class RESTHelper {
 	private static <T> RESTResponse<T> doPutInternal(final Map<String, String> body, String urlString,
 			final Map<String, String> parameters, final Map<String, String> headers, final boolean asBytes)
 			throws G2GClientException, G2GRestException {
-
-		// Create logger
-		Logger logger = LoggerFactory.getLogger(RESTHelper.class);
 
 		// create response object
 		RESTResponse<T> response = new RESTResponse<T>();
@@ -307,8 +299,7 @@ public class RESTHelper {
 		// Build request
 		HttpRequest request = requestBuilder.build();
 
-		System.out.println("Make a " + request.method() + " request to " + request.uri().toString());
-		logger.info("Make a {} request to {}", request.method(), request.uri().toString());
+		logger.info("Make a {} request to {}", request.method(), request.uri());
 
 		// Create client
 		HttpClient.Builder clientBuilder = HttpClient.newBuilder();
@@ -339,9 +330,6 @@ public class RESTHelper {
 	private static <T> RESTResponse<T> doPostInternal(final String body, String urlString,
 			final Map<String, String> parameters, final Map<String, String> headers, final boolean asBytes)
 			throws G2GClientException, G2GRestException {
-		// Create logger
-		Logger logger = LoggerFactory.getLogger(RESTHelper.class);
-
 		// create response object
 		RESTResponse<T> response = new RESTResponse<T>();
 
@@ -363,8 +351,7 @@ public class RESTHelper {
 		// Build request
 		HttpRequest request = requestBuilder.build();
 
-		System.out.println("Make a " + request.method() + " request to " + request.uri().toString());
-		logger.info(String.format("Make a {} request to %s", request.method(), request.uri().toString()));
+		logger.info("Make a {} request to {}", request.method(), request.uri());
 
 		// Create client
 		HttpClient.Builder clientBuilder = HttpClient.newBuilder();
@@ -385,9 +372,6 @@ public class RESTHelper {
 	private static <T> RESTResponse<T> doPatchInternal(final Map<String, List<Map<String, String>>> body,
 			String urlString, final Map<String, String> parameters, final Map<String, String> headers,
 			final boolean asBytes) throws G2GClientException, G2GRestException {
-		// Create logger
-		Logger logger = LoggerFactory.getLogger(RESTHelper.class);
-
 		// create response object
 		RESTResponse<T> response = new RESTResponse<T>();
 
@@ -403,7 +387,7 @@ public class RESTHelper {
 			// convert map to JSON String
 			Gson gsonObj = new Gson();
 			publisher = HttpRequest.BodyPublishers.ofString(gsonObj.toJson(body));
-			System.out.println(gsonObj.toJson(body));
+			logger.debug("Patch request body: {}", gsonObj.toJson(body));
 		}
 
 		// Create request
@@ -412,8 +396,7 @@ public class RESTHelper {
 		// Build request
 		HttpRequest request = requestBuilder.build();
 
-		System.out.println("Make a " + request.method() + " request to " + request.uri().toString());
-		logger.info(String.format("Make a %s request to %s", request.method(), request.uri().toString()));
+		logger.info("Make a {} request to {}", request.method(), request.uri());
 
 		// Create client
 		HttpClient.Builder clientBuilder = HttpClient.newBuilder();

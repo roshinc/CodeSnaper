@@ -37,7 +37,7 @@ public class GitLabService implements IRemoteService {
 
 		Preconditions.checkNotNull(config, "GitLabService cannot be intialized with no config.");
 
-		logger.debug("GitLabDownloader initializing with " + config);
+		logger.debug("GitLabDownloader initializing with {}", config);
 		this.api = new GitLabApi(config);
 
 	}
@@ -110,12 +110,10 @@ public class GitLabService implements IRemoteService {
 			// projectApiInvoker.changeDefaultBranch(branchName);
 			return true;
 		} catch (G2GRestException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("Failed to create and protect branch {}", branchName, e);
 			return false;
 		} catch (G2GClientException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("Failed to create and protect branch {}", branchName, e);
 			return false;
 		}
 
@@ -131,12 +129,10 @@ public class GitLabService implements IRemoteService {
 			// projectApiInvoker.changeDefaultBranch(branchName);
 			return true;
 		} catch (G2GRestException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("Failed to update default branch merge permissions", e);
 			return false;
 		} catch (G2GClientException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("Failed to update default branch merge permissions", e);
 			return false;
 		}
 	}
@@ -151,12 +147,10 @@ public class GitLabService implements IRemoteService {
 			projectApiInvoker.changeDescription(description);
 			return true;
 		} catch (G2GRestException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("Failed to set project description", e);
 			return false;
 		} catch (G2GClientException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("Failed to set project description", e);
 			return false;
 		}
 

@@ -91,9 +91,8 @@ public class InitCommitAndPusher {
 //					this.pull();
 //				} else
 				if (remoteRepoExists) {
-					logger.error(String.format(
-							"Remote repo [%s] exists and pushToExistingRepo is false" + ", will not continue",
-							this.gitConfig.getRemoteUrl().getRepoURL()));
+					logger.error("Remote repo [{}] exists and pushToExistingRepo is false, will not continue",
+							this.gitConfig.getRemoteUrl().getRepoURL());
 					throw new G2GRepoAlreadyExistsException(
 							String.format("Remote repo [%s] already exists, will not continue",
 									this.gitConfig.getRemoteUrl().getRepoURL()),
@@ -203,9 +202,9 @@ public class InitCommitAndPusher {
 		if (!repositoryExists(localRepo.toFile())) {
 			this.gitRepo = Git.init().setDirectory(localRepo.toFile()).setInitialBranch(DEFAULT_INITIAL_BRANCH_NAME)
 					.call();
-			logger.info("Created repository: " + this.gitRepo.getRepository().getDirectory());
+			logger.info("Created repository: {}", this.gitRepo.getRepository().getDirectory());
 		} else {
-			logger.info("Repository: " + localRepo + " already exists.");
+			logger.info("Repository: {} already exists.", localRepo);
 		}
 	}
 
@@ -222,7 +221,7 @@ public class InitCommitAndPusher {
 		FileRepositoryBuilder repositoryBuilder = new FileRepositoryBuilder();
 		repositoryBuilder.addCeilingDirectory(directory);
 		repositoryBuilder.findGitDir(directory);
-		System.out.println(repositoryBuilder.getGitDir());
+		logger.debug("Found git directory: {}", repositoryBuilder.getGitDir());
 		if (repositoryBuilder.getGitDir() != null) {
 
 			gitDirExists = true;

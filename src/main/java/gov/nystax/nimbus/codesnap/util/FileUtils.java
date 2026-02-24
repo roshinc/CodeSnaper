@@ -65,9 +65,9 @@ public class FileUtils {
     public static void deleteFolder(Path localRepo) throws IOException {
         if (Files.exists(localRepo)) {
             deleteDirectory(localRepo.toFile());
-            System.out.println("Local repository deleted.");
+            logger.info("Local repository deleted.");
         } else {
-            System.out.println("Local repository not found. Skipping delete operation.");
+            logger.warn("Local repository not found. Skipping delete operation.");
         }
     }
 

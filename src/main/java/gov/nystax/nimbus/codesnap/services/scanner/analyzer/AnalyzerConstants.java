@@ -29,6 +29,11 @@ public final class AnalyzerConstants {
      */
     public static final String FUNCTION_ANNOTATION = "gov.nystax.nimbus.smart.Function";
 
+    /**
+     * Fully qualified name of the @CTGClient annotation.
+     */
+    public static final String CTG_CLIENT_ANNOTATION = "gov.nystax.nimbus.ctg.CTGClient";
+
     // ============================================================================
     // Interfaces
     // ============================================================================
@@ -37,6 +42,11 @@ public final class AnalyzerConstants {
      * Fully qualified name of the IEventPublisher interface.
      */
     public static final String EVENT_PUBLISHER_INTERFACE = "gov.nystax.nimbus.eda.publisher.service.IEventPublisher";
+
+    /**
+     * Fully qualified name of the ICTGClient interface.
+     */
+    public static final String CTG_CLIENT_INTERFACE = "gov.nystax.nimbus.ctg.ICTGClient";
 
     // ============================================================================
     // Classes

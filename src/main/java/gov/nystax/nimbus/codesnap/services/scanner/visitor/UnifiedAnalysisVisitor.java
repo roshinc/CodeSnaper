@@ -310,9 +310,11 @@ public class UnifiedAnalysisVisitor extends CtScanner {
         // Check if this is an event publisher invocation
         if (isPublishEventInvocation(invocation)) {
             processEventPublisherInvocation(invocation);
+            return;
         }
         if (isLegacyGatewayHttpClientInvocation(invocation)) {
             processLegacyGatewayHttpClientInvocation(invocation);
+            return;
         }
     }
 

@@ -59,6 +59,9 @@ public class ProjectInfo implements ProjectSnap {
     @JsonProperty("legacyGatewayHttpClientInvocations")
     private List<LegacyGatewayHttpClientInvocation> legacyGatewayHttpClientInvocations;
 
+    @JsonProperty("ctgUsages")
+    private List<CtgUsage> ctgUsages;
+
     public ProjectInfo() {
     }
 
@@ -237,6 +240,14 @@ public class ProjectInfo implements ProjectSnap {
         this.legacyGatewayHttpClientInvocations = legacyGatewayHttpClientInvocations == null ? null : new ArrayList<>(legacyGatewayHttpClientInvocations);
     }
 
+    public List<CtgUsage> getCtgUsages() {
+        return ctgUsages == null ? null : new ArrayList<>(ctgUsages);
+    }
+
+    public void setCtgUsages(List<CtgUsage> ctgUsages) {
+        this.ctgUsages = ctgUsages == null ? null : new ArrayList<>(ctgUsages);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -262,7 +273,8 @@ public class ProjectInfo implements ProjectSnap {
                 Objects.equals(functionUsages, that.functionUsages) &&
                 Objects.equals(serviceUsages, that.serviceUsages) &&
                 Objects.equals(eventPublisherInvocations, that.eventPublisherInvocations) &&
-                Objects.equals(legacyGatewayHttpClientInvocations, that.legacyGatewayHttpClientInvocations);
+                Objects.equals(legacyGatewayHttpClientInvocations, that.legacyGatewayHttpClientInvocations) &&
+                Objects.equals(ctgUsages, that.ctgUsages);
     }
 
     @Override
@@ -272,7 +284,7 @@ public class ProjectInfo implements ProjectSnap {
                 serviceInterface, serviceImplementation, isUIService, functionMappings, uiServiceMethodMappings,
                 methodImplementationMappings,
                 serviceDependencies, functionDependencies, functionUsages, serviceUsages,
-                eventPublisherInvocations, legacyGatewayHttpClientInvocations);
+                eventPublisherInvocations, legacyGatewayHttpClientInvocations, ctgUsages);
     }
 
     @Override
@@ -297,6 +309,7 @@ public class ProjectInfo implements ProjectSnap {
                 ", serviceUsages=" + serviceUsages +
                 ", eventPublisherUsages=" + eventPublisherInvocations +
                 ", legacyGatewayHttpClientUsages=" + legacyGatewayHttpClientInvocations +
+                ", ctgUsages=" + ctgUsages +
                 '}';
     }
 }

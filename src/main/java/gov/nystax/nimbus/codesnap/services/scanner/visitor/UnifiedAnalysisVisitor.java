@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
  * - Function mappings from @Function annotations
  * - Function dependency invocations
  * - Service dependency invocations
+ * - CTG (CICS Transaction Gateway) invocations
  * - Event publisher invocations
  */
 public class UnifiedAnalysisVisitor extends CtScanner {
@@ -54,6 +55,13 @@ public class UnifiedAnalysisVisitor extends CtScanner {
     // Constants - Legacy Gateway Http Client (SMART) Analysis
     // ============================================================================
     private static final String POST_LGHC_METHOD = "post";
+
+    // ============================================================================
+    // Constants - CTG (CICS Transaction Gateway) Analysis
+    // ============================================================================
+    private static final String CTG_METHOD_INVOKE = "invoke";
+    private static final String CTG_METHOD_INVOKE_ASYNC = "invokeAsync";
+    private static final String CTG_ANNOTATION_VALUE_ATTRIBUTE = "value";
 
     // ============================================================================
     // Constants - Common
@@ -92,6 +100,9 @@ public class UnifiedAnalysisVisitor extends CtScanner {
     private final Set<String> functionClassNames = new HashSet<>();
     private final Map<String, String> functionClassToId = new HashMap<>();
     private final Map<String, String> servicePackages = new HashMap<>();
+
+    // CTG: Maps field simple name -> CTG component ID from @CTGClient annotation
+    private final Map<String, String> ctgFieldToComponentId = new HashMap<>();
 
     // Call chain building: All methods and their callers (populated after first pass)
     private Map<String, List<CtMethod<?>>> methodToCallers = null;
@@ -173,6 +184,14 @@ public class UnifiedAnalysisVisitor extends CtScanner {
         checkForFunctionAnnotation(method);
 
         super.visitCtMethod(method);
+    }
+
+    @Override
+    public <T> void visitCtField(CtField<T> field) {
+        // Check for @CTGClient annotation on the field
+        checkForCtgClientAnnotation(field);
+
+        super.visitCtField(field);
     }
 
     @Override
@@ -287,6 +306,30 @@ public class UnifiedAnalysisVisitor extends CtScanner {
     }
 
     // ============================================================================
+    // CTG Field Annotation Detection
+    // ============================================================================
+
+    /**
+     * Checks if a field has the @CTGClient annotation and records the mapping
+     * from field name to CTG component ID.
+     */
+    private <T> void checkForCtgClientAnnotation(CtField<T> field) {
+        field.getAnnotations().stream()
+                .filter(annotation -> annotation.getAnnotationType()
+                        .getQualifiedName().equals(AnalyzerConstants.CTG_CLIENT_ANNOTATION))
+                .forEach(annotation -> {
+                    Object valueObj = annotation.getValue(CTG_ANNOTATION_VALUE_ATTRIBUTE);
+                    if (valueObj != null) {
+                        String componentId = valueObj.toString().replace(DOUBLE_QUOTE, EMPTY_STRING);
+                        ctgFieldToComponentId.put(field.getSimpleName(), componentId);
+
+                        logger.debug("Found @CTGClient annotation: componentId='{}', field='{}'",
+                                componentId, field.getSimpleName());
+                    }
+                });
+    }
+
+    // ============================================================================
     // Invocation Analysis - Main Dispatcher
     // ============================================================================
 
@@ -304,6 +347,12 @@ public class UnifiedAnalysisVisitor extends CtScanner {
         String servicePackage = getServicePackageIfMatch(invocation);
         if (servicePackage != null) {
             processServiceInvocation(invocation, servicePackage);
+            return;
+        }
+
+        // Check if this is a CTG invocation
+        if (isCtgInvocation(invocation)) {
+            processCtgInvocation(invocation);
             return;
         }
 
@@ -620,6 +669,116 @@ public class UnifiedAnalysisVisitor extends CtScanner {
         results.legacyGatewayHttpClientInvocations.add(legacyGatewayHttpClientInvocation);
     }
 
+    // ============================================================================
+    // CTG Invocation Analysis
+    // ============================================================================
+
+    /**
+     * Checks if an invocation is a call to ICTGClient.invoke() or ICTGClient.invokeAsync().
+     */
+    private boolean isCtgInvocation(CtInvocation<?> invocation) {
+        CtExecutableReference<?> execRef = invocation.getExecutable();
+        if (execRef == null) {
+            return false;
+        }
+
+        String methodName = execRef.getSimpleName();
+        if (!CTG_METHOD_INVOKE.equals(methodName) && !CTG_METHOD_INVOKE_ASYNC.equals(methodName)) {
+            return false;
+        }
+
+        CtExpression<?> target = invocation.getTarget();
+        if (target == null) {
+            return false;
+        }
+
+        CtTypeReference<?> targetType = target.getType();
+        return targetType != null && isCtgClientType(targetType);
+    }
+
+    /**
+     * Checks if a type is or extends ICTGClient.
+     */
+    private boolean isCtgClientType(CtTypeReference<?> typeRef) {
+        if (typeRef == null) {
+            return false;
+        }
+
+        String qualifiedName = typeRef.getQualifiedName();
+        if (AnalyzerConstants.CTG_CLIENT_INTERFACE.equals(qualifiedName)) {
+            return true;
+        }
+
+        try {
+            CtType<?> typeDecl = typeRef.getTypeDeclaration();
+            if (typeDecl != null) {
+                for (CtTypeReference<?> superInterface : typeDecl.getSuperInterfaces()) {
+                    if (isCtgClientType(superInterface)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not resolve type declaration for: {}", qualifiedName);
+        }
+
+        return false;
+    }
+
+    /**
+     * Processes a CTG invocation and adds it to results.
+     * Resolves the CTG component ID by looking up the target variable name
+     * in the ctgFieldToComponentId mapping.
+     */
+    private void processCtgInvocation(CtInvocation<?> invocation) {
+        CtMethod<?> enclosingMethod = invocation.getParent(CtMethod.class);
+        if (enclosingMethod == null) {
+            return;
+        }
+
+        String componentId = resolveCtgComponentId(invocation);
+        if (componentId == null) {
+            return;
+        }
+
+        String invocationSite = getInvocationSite(invocation);
+        MethodReference enclosingMethodEntry = new MethodReference(
+                getMethodSignature(enclosingMethod),
+                getMethodAccessModifier(enclosingMethod)
+        );
+        String invocationType = invocation.getExecutable().getSimpleName();
+
+        CtgInvocation ctgInvocation = new CtgInvocation(invocationSite, enclosingMethodEntry, invocationType);
+
+        if (methodToCallers != null) {
+            List<MethodReference> callChain = buildCallChain(enclosingMethod);
+            ctgInvocation.setCallChain(callChain);
+        }
+
+        results.ctgInvocations.computeIfAbsent(componentId, k -> new ArrayList<>()).add(ctgInvocation);
+    }
+
+    /**
+     * Resolves the CTG component ID from an invocation's target.
+     * Looks up the target variable's simple name in the ctgFieldToComponentId map.
+     */
+    private String resolveCtgComponentId(CtInvocation<?> invocation) {
+        CtExpression<?> target = invocation.getTarget();
+
+        if (target instanceof CtVariableAccess<?> varAccess) {
+            String fieldName = varAccess.getVariable().getSimpleName();
+            String componentId = ctgFieldToComponentId.get(fieldName);
+            if (componentId != null) {
+                return componentId;
+            }
+            logger.debug("CTG field '{}' not found in annotation map, using UNKNOWN", fieldName);
+            return UNKNOWN;
+        }
+
+        logger.debug("CTG invocation target is not a variable access: {}", target);
+        return UNKNOWN;
+    }
+
     /**
      * Processes an event publisher invocation and adds it to results.
      */
@@ -819,9 +978,10 @@ public class UnifiedAnalysisVisitor extends CtScanner {
         // Dependency mappings
         public final Map<String, String> functionIdToDependency = new HashMap<>();
         public final Map<String, String> serviceIdToDependency = new HashMap<>();
-        // Invocations categorized by function/service ID
+        // Invocations categorized by function/service/CTG ID
         public final Map<String, List<FunctionInvocation>> functionInvocations = new HashMap<>();
         public final Map<String, List<ServiceInvocation>> serviceInvocations = new HashMap<>();
+        public final Map<String, List<CtgInvocation>> ctgInvocations = new HashMap<>();
         public final List<EventPublisherInvocation> eventPublisherInvocations = new ArrayList<>();
         public final List<LegacyGatewayHttpClientInvocation> legacyGatewayHttpClientInvocations = new ArrayList<>();
         // Type and method counts

@@ -132,6 +132,8 @@ public class SpoonCodeAnalyzer {
                         .mapToInt(List::size).sum() +
                         results.serviceInvocations.values().stream()
                                 .mapToInt(List::size).sum() +
+                        results.ctgInvocations.values().stream()
+                                .mapToInt(List::size).sum() +
                         results.eventPublisherInvocations.size() +
                         results.legacyGatewayHttpClientInvocations.size();
                 context.getMetrics().setInvocationsAnalyzed(totalInvocations);
@@ -153,6 +155,10 @@ public class SpoonCodeAnalyzer {
             projectInfo.setServiceUsages(serviceUsages);
             logger.info("Found {} service usages", serviceUsages.size());
 
+            // Build CTG usages from invocations
+            List<CtgUsage> ctgUsages = buildCtgUsages(results);
+            projectInfo.setCtgUsages(ctgUsages);
+            logger.info("Found {} CTG usages", ctgUsages.size());
 
             // Set event publisher invocations
             projectInfo.setEventPublisherInvocations(results.eventPublisherInvocations);
@@ -271,6 +277,25 @@ public class SpoonCodeAnalyzer {
         return serviceUsages;
     }
 
+
+    /**
+     * Builds CtgUsage objects from collected CTG invocations.
+     */
+    private List<CtgUsage> buildCtgUsages(UnifiedAnalysisVisitor.AnalysisResults results) {
+        List<CtgUsage> ctgUsages = new ArrayList<>();
+
+        for (Map.Entry<String, List<CtgInvocation>> entry :
+                results.ctgInvocations.entrySet()) {
+            String componentId = entry.getKey();
+            List<CtgInvocation> invocations = entry.getValue();
+
+            CtgUsage usage = new CtgUsage(componentId);
+            usage.setInvocations(invocations);
+            ctgUsages.add(usage);
+        }
+
+        return ctgUsages;
+    }
 
     /**
      * Validates and sets the service interface and implementation.

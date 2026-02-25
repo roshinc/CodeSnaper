@@ -101,7 +101,7 @@ public class UnifiedAnalysisVisitor extends CtScanner {
     private final Map<String, String> functionClassToId = new HashMap<>();
     private final Map<String, String> servicePackages = new HashMap<>();
 
-    // CTG: Maps field simple name -> CTG component ID from @CTGClient annotation
+    // CTG: Maps fully-qualified field key (ClassName.fieldName) -> CTG component ID
     private final Map<String, String> ctgFieldToComponentId = new HashMap<>();
 
     // Call chain building: All methods and their callers (populated after first pass)
@@ -311,20 +311,32 @@ public class UnifiedAnalysisVisitor extends CtScanner {
 
     /**
      * Checks if a field has the @CTGClient annotation and records the mapping
-     * from field name to CTG component ID.
+     * from fully-qualified field key to CTG component ID.
      */
     private <T> void checkForCtgClientAnnotation(CtField<T> field) {
         field.getAnnotations().stream()
                 .filter(annotation -> annotation.getAnnotationType()
                         .getQualifiedName().equals(AnalyzerConstants.CTG_CLIENT_ANNOTATION))
                 .forEach(annotation -> {
+                    CtTypeReference<?> fieldType = field.getType();
+                    if (fieldType == null || !isCtgClientType(fieldType)) {
+                        String fieldTypeName = fieldType != null ? fieldType.getQualifiedName() : UNKNOWN;
+                        logger.warn("Ignoring @CTGClient on non-ICTGClient field '{}', type='{}'",
+                                buildCtgFieldKey(field), fieldTypeName);
+                        return;
+                    }
+
                     Object valueObj = annotation.getValue(CTG_ANNOTATION_VALUE_ATTRIBUTE);
                     if (valueObj != null) {
                         String componentId = valueObj.toString().replace(DOUBLE_QUOTE, EMPTY_STRING);
-                        ctgFieldToComponentId.put(field.getSimpleName(), componentId);
+                        String fieldKey = buildCtgFieldKey(field);
+                        ctgFieldToComponentId.put(fieldKey, componentId);
 
-                        logger.debug("Found @CTGClient annotation: componentId='{}', field='{}'",
-                                componentId, field.getSimpleName());
+                        logger.debug("Registered @CTGClient mapping: componentId='{}', field='{}'",
+                                componentId, fieldKey);
+                    } else {
+                        logger.warn("Ignoring @CTGClient without '{}' attribute on field '{}'",
+                                CTG_ANNOTATION_VALUE_ATTRIBUTE, buildCtgFieldKey(field));
                     }
                 });
     }
@@ -736,7 +748,7 @@ public class UnifiedAnalysisVisitor extends CtScanner {
             return;
         }
 
-        String componentId = resolveCtgComponentId(invocation);
+        String componentId = resolveCtgComponentId(invocation, enclosingMethod);
         if (componentId == null) {
             return;
         }
@@ -760,23 +772,59 @@ public class UnifiedAnalysisVisitor extends CtScanner {
 
     /**
      * Resolves the CTG component ID from an invocation's target.
-     * Looks up the target variable's simple name in the ctgFieldToComponentId map.
+     * Looks up the target field's fully-qualified key in the ctgFieldToComponentId map.
      */
-    private String resolveCtgComponentId(CtInvocation<?> invocation) {
+    private String resolveCtgComponentId(CtInvocation<?> invocation, CtMethod<?> enclosingMethod) {
         CtExpression<?> target = invocation.getTarget();
+        String invocationSite = getInvocationSite(invocation);
+        String enclosingMethodSignature = getMethodSignature(enclosingMethod);
 
-        if (target instanceof CtVariableAccess<?> varAccess) {
-            String fieldName = varAccess.getVariable().getSimpleName();
-            String componentId = ctgFieldToComponentId.get(fieldName);
-            if (componentId != null) {
-                return componentId;
-            }
-            logger.debug("CTG field '{}' not found in annotation map, using UNKNOWN", fieldName);
-            return UNKNOWN;
+        if (!(target instanceof CtVariableAccess<?> varAccess)) {
+            logger.warn("Skipping unresolved CTG invocation at '{}' in '{}': target is not a field access (target='{}')",
+                    invocationSite, enclosingMethodSignature, target);
+            return null;
         }
 
-        logger.debug("CTG invocation target is not a variable access: {}", target);
-        return UNKNOWN;
+        String fieldKey = buildCtgFieldKey(varAccess);
+        if (fieldKey == null) {
+            String variableName = varAccess.getVariable() != null ? varAccess.getVariable().getSimpleName() : UNKNOWN;
+            logger.warn("Skipping unresolved CTG invocation at '{}' in '{}': target '{}' is not a resolvable field",
+                    invocationSite, enclosingMethodSignature, variableName);
+            return null;
+        }
+
+        String componentId = ctgFieldToComponentId.get(fieldKey);
+        if (componentId == null) {
+            logger.warn("Skipping unresolved CTG invocation at '{}' in '{}': no @CTGClient mapping for field '{}'",
+                    invocationSite, enclosingMethodSignature, fieldKey);
+            return null;
+        }
+
+        return componentId;
+    }
+
+    /**
+     * Builds a fully-qualified CTG field key in the form ClassName.fieldName.
+     */
+    private String buildCtgFieldKey(CtField<?> field) {
+        CtType<?> declaringType = field.getDeclaringType();
+        String className = declaringType != null ? declaringType.getQualifiedName() : UNKNOWN_CLASS;
+        return className + PERIOD_SEPARATOR + field.getSimpleName();
+    }
+
+    /**
+     * Builds a fully-qualified CTG field key from a variable access target.
+     * Returns null when the access does not resolve to a field declaration.
+     */
+    private String buildCtgFieldKey(CtVariableAccess<?> variableAccess) {
+        if (variableAccess.getVariable() == null) {
+            return null;
+        }
+        CtVariable<?> variableDeclaration = variableAccess.getVariable().getDeclaration();
+        if (!(variableDeclaration instanceof CtField<?> fieldDeclaration)) {
+            return null;
+        }
+        return buildCtgFieldKey(fieldDeclaration);
     }
 
     /**

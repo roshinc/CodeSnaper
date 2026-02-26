@@ -19,7 +19,7 @@ public class GitRepoURL {
     private String pathWithNamespace = null;
     private String groupPathWithNamespace = null;
 
-    public static final String DEFAULT_BASE_URL = "https://nyssc.svc.ny.gov";
+    public static final String DEFAULT_BASE_URL = "https://gitlab.com";
     private static final String REGEX = "^(([A-Z])|([a-z])|([0-9]))+((((-)|(_))?((([A-Z])|([a-z])|([0-9]))+))|(((([A-Z])|([a-z])|([0-9]))+((-)|(_))?)))*$";
 
     public GitRepoURL(Optional<String> baseURL, List<String> groups, String repoName) throws MalformedURLException {

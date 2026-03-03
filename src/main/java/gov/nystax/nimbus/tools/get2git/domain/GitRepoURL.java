@@ -6,6 +6,7 @@ import org.apache.logging.log4j.util.Strings;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,6 +22,45 @@ public class GitRepoURL {
 
     public static final String DEFAULT_BASE_URL = "https://gitlab.com";
     private static final String REGEX = "^(([A-Z])|([a-z])|([0-9]))+((((-)|(_))?((([A-Z])|([a-z])|([0-9]))+))|(((([A-Z])|([a-z])|([0-9]))+((-)|(_))?)))*$";
+
+    /**
+     * Parses a slash-delimited path into a {@link GitRepoURL} using the default base URL.
+     * All segments except the last are treated as groups; the last segment is the repository name.
+     *
+     * @param path slash-delimited path, e.g. {@code "ORG/java/services/product/service"}
+     * @return a fully constructed {@link GitRepoURL}
+     * @throws MalformedURLException if the base URL is malformed
+     * @throws IllegalArgumentException if the path is null, empty, or contains fewer than two segments
+     */
+    public static GitRepoURL fromPath(String path) throws MalformedURLException {
+        return fromPath(path, Optional.empty());
+    }
+
+    /**
+     * Parses a slash-delimited path into a {@link GitRepoURL}.
+     * All segments except the last are treated as groups; the last segment is the repository name.
+     *
+     * @param path    slash-delimited path, e.g. {@code "ORG/java/services/product/service"}
+     * @param baseURL optional base URL; defaults to {@link #DEFAULT_BASE_URL} when empty
+     * @return a fully constructed {@link GitRepoURL}
+     * @throws MalformedURLException    if the base URL is malformed
+     * @throws IllegalArgumentException if the path is null, empty, or contains fewer than two segments
+     */
+    public static GitRepoURL fromPath(String path, Optional<String> baseURL) throws MalformedURLException {
+        Preconditions.checkArgument(Strings.isNotEmpty(path), "Path must not be null or empty");
+
+        List<String> segments = Arrays.stream(path.split("/"))
+                .filter(Strings::isNotEmpty)
+                .toList();
+
+        Preconditions.checkArgument(segments.size() >= 2,
+                "Path must contain at least a group and a repository name, got: %s", path);
+
+        List<String> groups = segments.subList(0, segments.size() - 1);
+        String repoName = segments.get(segments.size() - 1);
+
+        return new GitRepoURL(baseURL, groups, repoName);
+    }
 
     public GitRepoURL(Optional<String> baseURL, List<String> groups, String repoName) throws MalformedURLException {
         super();

@@ -42,6 +42,19 @@ public class SpoonCodeAnalyzer {
     // Default values
     private static final int DEFAULT_COUNT = 0;
 
+    private List<Path> classpathJars = List.of();
+
+    /**
+     * Sets the classpath JARs to use for Spoon analysis.
+     * When set, Spoon will use full classpath mode instead of no-classpath mode,
+     * enabling accurate type resolution.
+     *
+     * @param classpathJars List of paths to JAR files
+     */
+    public void setClasspathJars(List<Path> classpathJars) {
+        this.classpathJars = classpathJars != null ? classpathJars : List.of();
+    }
+
     /**
      * Analyzes Java source code and updates the ProjectInfo with statistics.
      *
@@ -85,7 +98,19 @@ public class SpoonCodeAnalyzer {
             // Build the Spoon model
             Launcher launcher = new Launcher();
             launcher.addInputResource(srcPath.toString());
-            launcher.getEnvironment().setNoClasspath(true);
+
+            if (!classpathJars.isEmpty()) {
+                // Use full classpath mode with downloaded JARs
+                String[] classpathEntries = classpathJars.stream()
+                        .map(Path::toString)
+                        .toArray(String[]::new);
+                launcher.getEnvironment().setSourceClasspath(classpathEntries);
+                launcher.getEnvironment().setNoClasspath(false);
+                logger.info("Using classpath mode with {} JARs", classpathJars.size());
+            } else {
+                launcher.getEnvironment().setNoClasspath(true);
+            }
+
             launcher.getEnvironment().setAutoImports(true);
             launcher.getEnvironment().setCommentEnabled(false);
 

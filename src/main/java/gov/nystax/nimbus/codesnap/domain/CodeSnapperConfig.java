@@ -16,6 +16,9 @@ public final class CodeSnapperConfig {
     private final List<String> gitGroups;
     private final String gitToken;
     private final Path localTempRootPath;
+    private final boolean useClasspath;
+    private final Path mavenHome;
+    private final Path mavenSettingsFile;
 
     private CodeSnapperConfig(Builder builder) {
         this.serviceId = builder.serviceId;
@@ -24,6 +27,9 @@ public final class CodeSnapperConfig {
         this.gitGroups = builder.gitGroups;
         this.gitToken = builder.gitToken;
         this.localTempRootPath = builder.localTempRootPath;
+        this.useClasspath = builder.useClasspath;
+        this.mavenHome = builder.mavenHome;
+        this.mavenSettingsFile = builder.mavenSettingsFile;
     }
 
     public static Builder builder() {
@@ -55,6 +61,27 @@ public final class CodeSnapperConfig {
         return localTempRootPath;
     }
 
+    public boolean useClasspath() {
+        return useClasspath;
+    }
+
+    /**
+     * Path to the Maven installation directory (containing bin/mvn).
+     * If null, assumes mvn is on the system PATH.
+     */
+    public Path mavenHome() {
+        return mavenHome;
+    }
+
+    /**
+     * Path to a Maven settings.xml file for repository configuration
+     * (e.g., Artifactory credentials, mirror settings).
+     * If null, Maven uses its default settings (~/.m2/settings.xml).
+     */
+    public Path mavenSettingsFile() {
+        return mavenSettingsFile;
+    }
+
     public static final class Builder {
         private final static String DEFAULT_BRANCH_NAME = "main";
         private final Logger logger = LoggerFactory.getLogger(Builder.class);
@@ -64,6 +91,9 @@ public final class CodeSnapperConfig {
         private List<String> gitGroups;
         private String gitToken;
         private Path localTempRootPath;
+        private boolean useClasspath;
+        private Path mavenHome;
+        private Path mavenSettingsFile;
 
         private Builder() {
         }
@@ -95,6 +125,21 @@ public final class CodeSnapperConfig {
 
         public Builder localTempRootPath(Path localTempRootPath) {
             this.localTempRootPath = localTempRootPath;
+            return this;
+        }
+
+        public Builder useClasspath(boolean useClasspath) {
+            this.useClasspath = useClasspath;
+            return this;
+        }
+
+        public Builder mavenHome(Path mavenHome) {
+            this.mavenHome = mavenHome;
+            return this;
+        }
+
+        public Builder mavenSettingsFile(Path mavenSettingsFile) {
+            this.mavenSettingsFile = mavenSettingsFile;
             return this;
         }
 

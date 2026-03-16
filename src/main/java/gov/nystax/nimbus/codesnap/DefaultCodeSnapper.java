@@ -21,9 +21,11 @@ public class DefaultCodeSnapper implements CodeSnapper {
     private final NimbusServiceMeta nimbusServiceMeta;
     private final String commitHash;
     private final String gitToken;
+    private final CodeSnapperConfig config;
 
     public DefaultCodeSnapper(CodeSnapperConfig config) {
         if (config != null) {
+            this.config = config;
             this.nimbusServiceMeta = new NimbusServiceMeta(config);
             this.commitHash = config.commitHash();
             this.gitToken = config.gitToken();
@@ -61,7 +63,7 @@ public class DefaultCodeSnapper implements CodeSnapper {
 
             // Scan the project
             try {
-                NimbusServiceProjectScanner scanner = new NimbusServiceProjectScanner(this.nimbusServiceMeta, context);
+                NimbusServiceProjectScanner scanner = new NimbusServiceProjectScanner(this.nimbusServiceMeta, context, this.config);
                 projectSnap = scanner.scanProject();
             } catch (Exception e) {
                 logger.error("Error scanning project", e);

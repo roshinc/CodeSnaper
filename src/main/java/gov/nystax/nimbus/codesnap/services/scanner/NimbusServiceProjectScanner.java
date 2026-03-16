@@ -1,8 +1,10 @@
 package gov.nystax.nimbus.codesnap.services.scanner;
 
 import com.google.common.base.Preconditions;
+import gov.nystax.nimbus.codesnap.domain.CodeSnapperConfig;
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
+import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenDependencyResolver;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenProjectAnalyzer;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.SpoonCodeAnalyzer;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
@@ -14,17 +16,24 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 public class NimbusServiceProjectScanner {
 
     private static final Logger logger = LoggerFactory.getLogger(NimbusServiceProjectScanner.class);
     private final NimbusServiceMeta meta;
     private final ScanContext context;
+    private final CodeSnapperConfig config;
 
 
     public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context) {
+        this(meta, context, null);
+    }
+
+    public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context, CodeSnapperConfig config) {
         this.meta = meta;
         this.context = context;
+        this.config = config;
     }
 
     public ProjectSnap scanProject() {
@@ -61,12 +70,35 @@ public class NimbusServiceProjectScanner {
             context.error("Maven Analysis", e);
             throw new RuntimeException("Error scanning project", e);
         }
+        // Optionally resolve Maven dependencies for classpath
+        List<Path> classpathJars = List.of();
+        if (config != null && config.useClasspath()) {
+            try {
+                context.phaseStart("Dependency Resolution", "Downloading Maven dependency JARs");
+                Instant depStart = Instant.now();
+
+                MavenDependencyResolver resolver = new MavenDependencyResolver(
+                        config.mavenHome(), config.mavenSettingsFile());
+                classpathJars = resolver.resolveAndDownload(projectPath);
+
+                Duration depDuration = Duration.between(depStart, Instant.now());
+                logger.info("Dependency resolution took {} ms, resolved {} JARs",
+                        depDuration.toMillis(), classpathJars.size());
+                context.phaseComplete("Dependency Resolution", true);
+            } catch (Exception e) {
+                logger.warn("Dependency resolution failed, falling back to no-classpath mode", e);
+                context.phaseComplete("Dependency Resolution", false);
+                classpathJars = List.of();
+            }
+        }
+
         try {
             // Analyze source code with Spoon
             context.phaseStart("Code Analysis", "Analyzing source code with Spoon");
             Instant codeStart = Instant.now();
 
             SpoonCodeAnalyzer spoonAnalyzer = new SpoonCodeAnalyzer();
+            spoonAnalyzer.setClasspathJars(classpathJars);
             spoonAnalyzer.analyzeSourceCode(projectPath, projectInfo, context);
 
             // Update complete metrics

@@ -72,15 +72,14 @@ public class NimbusServiceProjectScanner {
         }
         // Optionally resolve Maven dependencies for classpath
         List<Path> classpathJars = List.of();
-        if (config != null && config.useClasspath() && !config.mavenRepositories().isEmpty()) {
+        if (config != null && config.useClasspath()) {
             try {
                 context.phaseStart("Dependency Resolution", "Downloading Maven dependency JARs");
                 Instant depStart = Instant.now();
 
-                Path depDir = projectPath.resolve("target").resolve("codesnap-deps");
                 MavenDependencyResolver resolver = new MavenDependencyResolver(
-                        config.mavenRepositories(), depDir);
-                classpathJars = resolver.resolveAndDownload(projectPath.resolve("pom.xml"));
+                        config.mavenHome(), config.mavenSettingsFile());
+                classpathJars = resolver.resolveAndDownload(projectPath);
 
                 Duration depDuration = Duration.between(depStart, Instant.now());
                 logger.info("Dependency resolution took {} ms, resolved {} JARs",

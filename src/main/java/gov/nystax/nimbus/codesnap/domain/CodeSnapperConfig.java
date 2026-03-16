@@ -19,6 +19,7 @@ public final class CodeSnapperConfig {
     private final boolean useClasspath;
     private final Path mavenHome;
     private final Path mavenSettingsFile;
+    private final List<MavenRepository> mavenRepositories;
 
     private CodeSnapperConfig(Builder builder) {
         this.serviceId = builder.serviceId;
@@ -30,6 +31,7 @@ public final class CodeSnapperConfig {
         this.useClasspath = builder.useClasspath;
         this.mavenHome = builder.mavenHome;
         this.mavenSettingsFile = builder.mavenSettingsFile;
+        this.mavenRepositories = builder.mavenRepositories != null ? builder.mavenRepositories : List.of();
     }
 
     public static Builder builder() {
@@ -82,6 +84,28 @@ public final class CodeSnapperConfig {
         return mavenSettingsFile;
     }
 
+    public List<MavenRepository> mavenRepositories() {
+        return mavenRepositories;
+    }
+
+    /**
+     * Represents a Maven repository configuration for downloading dependency JARs.
+     * When provided, a settings.xml is generated on the fly for Maven invocation.
+     */
+    public record MavenRepository(String id, String url, String username, String password) {
+
+        /**
+         * Creates a Maven repository with no authentication.
+         */
+        public MavenRepository(String id, String url) {
+            this(id, url, null, null);
+        }
+
+        public boolean hasCredentials() {
+            return username != null && !username.isEmpty() && password != null && !password.isEmpty();
+        }
+    }
+
     public static final class Builder {
         private final static String DEFAULT_BRANCH_NAME = "main";
         private final Logger logger = LoggerFactory.getLogger(Builder.class);
@@ -94,6 +118,7 @@ public final class CodeSnapperConfig {
         private boolean useClasspath;
         private Path mavenHome;
         private Path mavenSettingsFile;
+        private List<MavenRepository> mavenRepositories;
 
         private Builder() {
         }
@@ -140,6 +165,11 @@ public final class CodeSnapperConfig {
 
         public Builder mavenSettingsFile(Path mavenSettingsFile) {
             this.mavenSettingsFile = mavenSettingsFile;
+            return this;
+        }
+
+        public Builder mavenRepositories(List<MavenRepository> mavenRepositories) {
+            this.mavenRepositories = mavenRepositories;
             return this;
         }
 

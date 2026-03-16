@@ -1,5 +1,6 @@
 package gov.nystax.nimbus.codesnap.services.scanner.analyzer;
 
+import gov.nystax.nimbus.codesnap.domain.CodeSnapperConfig.MavenRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +27,10 @@ import java.util.stream.Stream;
  *   <li>Transitive dependencies</li>
  *   <li>Repository authentication via settings.xml</li>
  * </ul>
+ * <p>
+ * If {@link MavenRepository} entries are provided, a temporary {@code settings.xml}
+ * is generated on the fly with the repository URLs and credentials, so no
+ * pre-existing settings.xml is required.
  */
 public class MavenDependencyResolver {
 
@@ -36,18 +41,24 @@ public class MavenDependencyResolver {
 
     private final Path mavenHome;
     private final Path settingsFile;
+    private final List<MavenRepository> repositories;
 
     /**
      * Creates a new resolver.
      *
      * @param mavenHome    Path to Maven installation (containing bin/mvn). If null,
      *                     assumes {@code mvn} is on the system PATH.
-     * @param settingsFile Optional path to a Maven settings.xml file (e.g., for
-     *                     Artifactory credentials). If null, Maven uses its defaults.
+     * @param settingsFile Optional path to an existing Maven settings.xml file.
+     *                     If null and repositories are provided, a settings.xml is
+     *                     generated automatically. If null and no repositories are
+     *                     provided, Maven uses its default settings (~/.m2/settings.xml).
+     * @param repositories Maven repository configurations. If non-empty, a settings.xml
+     *                     is generated with these repos and their credentials.
      */
-    public MavenDependencyResolver(Path mavenHome, Path settingsFile) {
+    public MavenDependencyResolver(Path mavenHome, Path settingsFile, List<MavenRepository> repositories) {
         this.mavenHome = mavenHome;
         this.settingsFile = settingsFile;
+        this.repositories = repositories != null ? repositories : List.of();
     }
 
     /**
@@ -67,7 +78,10 @@ public class MavenDependencyResolver {
             return List.of();
         }
 
-        List<String> command = buildMavenCommand(projectPath, outputDir);
+        // Determine which settings.xml to use
+        Path effectiveSettings = resolveSettingsFile(projectPath);
+
+        List<String> command = buildMavenCommand(projectPath, outputDir, effectiveSettings);
         logger.info("Invoking Maven dependency resolution: {}", String.join(" ", command));
 
         try {
@@ -119,9 +133,104 @@ public class MavenDependencyResolver {
     }
 
     /**
+     * Determines which settings.xml to use:
+     * 1. If an explicit settingsFile was provided, use it.
+     * 2. If MavenRepository entries were provided, generate a temporary settings.xml.
+     * 3. Otherwise, return null (Maven uses its default ~/.m2/settings.xml).
+     */
+    private Path resolveSettingsFile(Path projectPath) {
+        if (settingsFile != null && Files.exists(settingsFile)) {
+            return settingsFile;
+        }
+        if (!repositories.isEmpty()) {
+            return generateSettingsXml(projectPath);
+        }
+        return null;
+    }
+
+    /**
+     * Generates a temporary Maven settings.xml containing the configured
+     * repositories and their credentials (as servers).
+     */
+    private Path generateSettingsXml(Path projectPath) {
+        StringBuilder xml = new StringBuilder();
+        xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        xml.append("<settings xmlns=\"http://maven.apache.org/SETTINGS/1.2.0\"\n");
+        xml.append("          xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
+        xml.append("          xsi:schemaLocation=\"http://maven.apache.org/SETTINGS/1.2.0 ");
+        xml.append("https://maven.apache.org/xsd/settings-1.2.0.xsd\">\n");
+
+        // Servers (credentials)
+        List<MavenRepository> authenticated = repositories.stream()
+                .filter(MavenRepository::hasCredentials)
+                .toList();
+        if (!authenticated.isEmpty()) {
+            xml.append("  <servers>\n");
+            for (MavenRepository repo : authenticated) {
+                xml.append("    <server>\n");
+                xml.append("      <id>").append(escapeXml(repo.id())).append("</id>\n");
+                xml.append("      <username>").append(escapeXml(repo.username())).append("</username>\n");
+                xml.append("      <password>").append(escapeXml(repo.password())).append("</password>\n");
+                xml.append("    </server>\n");
+            }
+            xml.append("  </servers>\n");
+        }
+
+        // Profiles with repositories
+        xml.append("  <profiles>\n");
+        xml.append("    <profile>\n");
+        xml.append("      <id>codesnap-repos</id>\n");
+        xml.append("      <repositories>\n");
+        for (MavenRepository repo : repositories) {
+            xml.append("        <repository>\n");
+            xml.append("          <id>").append(escapeXml(repo.id())).append("</id>\n");
+            xml.append("          <url>").append(escapeXml(repo.url())).append("</url>\n");
+            xml.append("          <releases><enabled>true</enabled></releases>\n");
+            xml.append("          <snapshots><enabled>true</enabled></snapshots>\n");
+            xml.append("        </repository>\n");
+        }
+        xml.append("      </repositories>\n");
+        xml.append("    </profile>\n");
+        xml.append("  </profiles>\n");
+
+        // Activate the profile
+        xml.append("  <activeProfiles>\n");
+        xml.append("    <activeProfile>codesnap-repos</activeProfile>\n");
+        xml.append("  </activeProfiles>\n");
+
+        xml.append("</settings>\n");
+
+        try {
+            Path settingsPath = projectPath.resolve("target").resolve("codesnap-settings.xml");
+            Files.createDirectories(settingsPath.getParent());
+            Files.writeString(settingsPath, xml.toString());
+            logger.info("Generated settings.xml with {} repositories at {}", repositories.size(), settingsPath);
+            return settingsPath;
+        } catch (IOException e) {
+            logger.error("Failed to generate settings.xml", e);
+            return null;
+        }
+    }
+
+    /**
+     * Escapes special XML characters in a string.
+     */
+    private static String escapeXml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
+    }
+
+    /**
      * Builds the Maven command to copy dependencies.
      */
-    private List<String> buildMavenCommand(Path projectPath, Path outputDir) {
+    private List<String> buildMavenCommand(Path projectPath, Path outputDir, Path effectiveSettings) {
         List<String> command = new ArrayList<>();
 
         // Maven executable
@@ -147,10 +256,10 @@ public class MavenDependencyResolver {
         // Non-interactive / batch mode
         command.add("-B");
 
-        // Optional settings.xml
-        if (settingsFile != null && Files.exists(settingsFile)) {
+        // Settings file (explicit, generated, or Maven default)
+        if (effectiveSettings != null) {
             command.add("-s");
-            command.add(settingsFile.toAbsolutePath().toString());
+            command.add(effectiveSettings.toAbsolutePath().toString());
         }
 
         // POM file

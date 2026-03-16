@@ -78,7 +78,7 @@ public class NimbusServiceProjectScanner {
                 Instant depStart = Instant.now();
 
                 MavenDependencyResolver resolver = new MavenDependencyResolver(
-                        config.mavenHome(), config.mavenSettingsFile());
+                        config.mavenHome(), config.mavenSettingsFile(), config.mavenRepositories());
                 classpathJars = resolver.resolveAndDownload(projectPath);
 
                 Duration depDuration = Duration.between(depStart, Instant.now());

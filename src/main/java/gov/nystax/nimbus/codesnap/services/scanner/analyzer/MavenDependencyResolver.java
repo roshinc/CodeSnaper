@@ -54,14 +54,19 @@ public class MavenDependencyResolver {
      * @return List of paths to downloaded JAR files
      */
     public List<Path> resolveAndDownload(Path pomFile) {
-        List<Dependency> dependencies = parseDependencies(pomFile);
-        if (dependencies.isEmpty()) {
+        ParsedPom pom = parsePom(pomFile);
+        if (pom.model == null) {
+            return List.of();
+        }
+
+        List<Dependency> dependencies = pom.model.getDependencies();
+        if (dependencies == null || dependencies.isEmpty()) {
             logger.info("No dependencies found in POM");
             return List.of();
         }
 
-        logger.info("Resolving {} dependencies from {} repositories",
-                dependencies.size(), repositories.size());
+        logger.info("Resolving {} dependencies from {} repositories (properties: {})",
+                dependencies.size(), repositories.size(), pom.properties.size());
 
         try {
             Files.createDirectories(downloadDir);
@@ -91,7 +96,7 @@ public class MavenDependencyResolver {
                 continue;
             }
 
-            Optional<Path> jarPath = downloadDependency(dependency);
+            Optional<Path> jarPath = downloadDependency(dependency, pom.properties);
             if (jarPath.isPresent()) {
                 downloadedJars.add(jarPath.get());
                 resolved++;
@@ -105,30 +110,128 @@ public class MavenDependencyResolver {
     }
 
     /**
-     * Parses dependencies from a POM file.
+     * Parses the POM file and returns a model with a resolved property map.
      */
-    private List<Dependency> parseDependencies(Path pomFile) {
+    private ParsedPom parsePom(Path pomFile) {
         try (FileReader reader = new FileReader(pomFile.toFile())) {
             MavenXpp3Reader pomReader = new MavenXpp3Reader();
             Model model = pomReader.read(reader);
-            return model.getDependencies() != null ? model.getDependencies() : List.of();
+            Map<String, String> properties = buildPropertyMap(model);
+            return new ParsedPom(model, properties);
         } catch (Exception e) {
             logger.error("Failed to parse POM file: {}", pomFile, e);
-            return List.of();
+            return new ParsedPom(null, Map.of());
         }
+    }
+
+    /**
+     * Builds a property map from the POM model, including built-in Maven properties
+     * like project.version, project.groupId, and project.artifactId, plus all
+     * user-defined properties from the &lt;properties&gt; section.
+     */
+    private Map<String, String> buildPropertyMap(Model model) {
+        Map<String, String> props = new HashMap<>();
+
+        // Built-in Maven properties
+        if (model.getVersion() != null) {
+            props.put("project.version", model.getVersion());
+            props.put("pom.version", model.getVersion());
+        }
+        if (model.getGroupId() != null) {
+            props.put("project.groupId", model.getGroupId());
+            props.put("pom.groupId", model.getGroupId());
+        }
+        if (model.getArtifactId() != null) {
+            props.put("project.artifactId", model.getArtifactId());
+            props.put("pom.artifactId", model.getArtifactId());
+        }
+
+        // User-defined <properties> section
+        if (model.getProperties() != null) {
+            for (Map.Entry<Object, Object> entry : model.getProperties().entrySet()) {
+                props.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+            }
+        }
+
+        // Resolve properties that reference other properties (one pass)
+        Map<String, String> resolved = new HashMap<>(props);
+        for (Map.Entry<String, String> entry : resolved.entrySet()) {
+            String val = entry.getValue();
+            if (val != null && val.contains("${")) {
+                entry.setValue(resolveString(val, props));
+            }
+        }
+
+        return resolved;
+    }
+
+    /**
+     * Resolves ${property} placeholders in a string using the given property map.
+     * Returns the original string if a property cannot be resolved.
+     */
+    private String resolveString(String value, Map<String, String> properties) {
+        if (value == null || !value.contains("${")) {
+            return value;
+        }
+
+        String result = value;
+        // Iterate to handle nested references (up to 5 levels deep)
+        for (int i = 0; i < 5 && result.contains("${"); i++) {
+            StringBuilder sb = new StringBuilder();
+            int pos = 0;
+            while (pos < result.length()) {
+                int start = result.indexOf("${", pos);
+                if (start == -1) {
+                    sb.append(result, pos, result.length());
+                    break;
+                }
+                sb.append(result, pos, start);
+                int end = result.indexOf('}', start + 2);
+                if (end == -1) {
+                    sb.append(result, start, result.length());
+                    break;
+                }
+                String key = result.substring(start + 2, end);
+                String resolved = properties.get(key);
+                if (resolved != null) {
+                    sb.append(resolved);
+                } else {
+                    // Keep the placeholder as-is if unresolvable
+                    sb.append(result, start, end + 1);
+                }
+                pos = end + 1;
+            }
+            result = sb.toString();
+        }
+        return result;
+    }
+
+    /**
+     * Returns true if the string contains unresolved ${...} placeholders.
+     */
+    private boolean hasUnresolvedPlaceholders(String value) {
+        return value != null && value.contains("${");
     }
 
     /**
      * Attempts to download a single dependency JAR from the configured repositories.
      * Tries each repository in order until one succeeds.
      */
-    private Optional<Path> downloadDependency(Dependency dependency) {
-        String groupId = dependency.getGroupId();
-        String artifactId = dependency.getArtifactId();
-        String version = dependency.getVersion();
+    private Optional<Path> downloadDependency(Dependency dependency, Map<String, String> properties) {
+        String groupId = resolveString(dependency.getGroupId(), properties);
+        String artifactId = resolveString(dependency.getArtifactId(), properties);
+        String version = resolveString(dependency.getVersion(), properties);
 
         if (groupId == null || artifactId == null || version == null) {
             logger.warn("Skipping dependency with missing coordinates: {}:{}:{}",
+                    groupId, artifactId, version);
+            return Optional.empty();
+        }
+
+        // Skip if any coordinate still has unresolved placeholders
+        if (hasUnresolvedPlaceholders(groupId) || hasUnresolvedPlaceholders(artifactId)
+                || hasUnresolvedPlaceholders(version)) {
+            logger.warn("Skipping dependency with unresolved placeholders: {}:{}:{}",
                     groupId, artifactId, version);
             return Optional.empty();
         }
@@ -167,6 +270,11 @@ public class MavenDependencyResolver {
         logger.warn("Could not resolve {}:{}:{} from any repository", groupId, artifactId, version);
         return Optional.empty();
     }
+
+    /**
+     * Holds a parsed POM model together with its resolved property map.
+     */
+    private record ParsedPom(Model model, Map<String, String> properties) {}
 
     /**
      * Downloads a file from the given URL to the target path.

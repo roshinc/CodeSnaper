@@ -16,6 +16,8 @@ public final class CodeSnapperConfig {
     private final List<String> gitGroups;
     private final String gitToken;
     private final Path localTempRootPath;
+    private final List<MavenRepository> mavenRepositories;
+    private final boolean useClasspath;
 
     private CodeSnapperConfig(Builder builder) {
         this.serviceId = builder.serviceId;
@@ -24,6 +26,8 @@ public final class CodeSnapperConfig {
         this.gitGroups = builder.gitGroups;
         this.gitToken = builder.gitToken;
         this.localTempRootPath = builder.localTempRootPath;
+        this.mavenRepositories = builder.mavenRepositories != null ? builder.mavenRepositories : List.of();
+        this.useClasspath = builder.useClasspath;
     }
 
     public static Builder builder() {
@@ -55,6 +59,31 @@ public final class CodeSnapperConfig {
         return localTempRootPath;
     }
 
+    public List<MavenRepository> mavenRepositories() {
+        return mavenRepositories;
+    }
+
+    public boolean useClasspath() {
+        return useClasspath;
+    }
+
+    /**
+     * Represents a Maven repository configuration for downloading dependency JARs.
+     */
+    public record MavenRepository(String id, String url, String username, String password) {
+
+        /**
+         * Creates a Maven repository with no authentication.
+         */
+        public MavenRepository(String id, String url) {
+            this(id, url, null, null);
+        }
+
+        public boolean hasCredentials() {
+            return username != null && !username.isEmpty() && password != null && !password.isEmpty();
+        }
+    }
+
     public static final class Builder {
         private final static String DEFAULT_BRANCH_NAME = "main";
         private final Logger logger = LoggerFactory.getLogger(Builder.class);
@@ -64,6 +93,8 @@ public final class CodeSnapperConfig {
         private List<String> gitGroups;
         private String gitToken;
         private Path localTempRootPath;
+        private List<MavenRepository> mavenRepositories;
+        private boolean useClasspath;
 
         private Builder() {
         }
@@ -95,6 +126,16 @@ public final class CodeSnapperConfig {
 
         public Builder localTempRootPath(Path localTempRootPath) {
             this.localTempRootPath = localTempRootPath;
+            return this;
+        }
+
+        public Builder mavenRepositories(List<MavenRepository> mavenRepositories) {
+            this.mavenRepositories = mavenRepositories;
+            return this;
+        }
+
+        public Builder useClasspath(boolean useClasspath) {
+            this.useClasspath = useClasspath;
             return this;
         }
 

@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenProjectAnalyzer;
+import gov.nystax.nimbus.codesnap.services.scanner.analyzer.ServiceResolutionConfig;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.SpoonCodeAnalyzer;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanContext;
@@ -20,11 +21,17 @@ public class NimbusServiceProjectScanner {
     private static final Logger logger = LoggerFactory.getLogger(NimbusServiceProjectScanner.class);
     private final NimbusServiceMeta meta;
     private final ScanContext context;
-
+    private final ServiceResolutionConfig resolutionConfig;
 
     public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context) {
+        this(meta, context, ServiceResolutionConfig.STRICT);
+    }
+
+    public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context,
+                                       ServiceResolutionConfig resolutionConfig) {
         this.meta = meta;
         this.context = context;
+        this.resolutionConfig = resolutionConfig;
     }
 
     public ProjectSnap scanProject() {
@@ -67,7 +74,7 @@ public class NimbusServiceProjectScanner {
             Instant codeStart = Instant.now();
 
             SpoonCodeAnalyzer spoonAnalyzer = new SpoonCodeAnalyzer();
-            spoonAnalyzer.analyzeSourceCode(projectPath, projectInfo, context);
+            spoonAnalyzer.analyzeSourceCode(projectPath, projectInfo, context, resolutionConfig);
 
             // Update complete metrics
             Duration codeDuration = Duration.between(codeStart, Instant.now());

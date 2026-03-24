@@ -16,6 +16,9 @@ public final class CodeSnapperConfig {
     private final List<String> gitGroups;
     private final String gitToken;
     private final Path localTempRootPath;
+    private final boolean lenientPairMatch;
+    private final boolean inferImpl;
+    private final boolean inferInterface;
 
     private CodeSnapperConfig(Builder builder) {
         this.serviceId = builder.serviceId;
@@ -24,6 +27,9 @@ public final class CodeSnapperConfig {
         this.gitGroups = builder.gitGroups;
         this.gitToken = builder.gitToken;
         this.localTempRootPath = builder.localTempRootPath;
+        this.lenientPairMatch = builder.lenientPairMatch;
+        this.inferImpl = builder.inferImpl;
+        this.inferInterface = builder.inferInterface;
     }
 
     public static Builder builder() {
@@ -55,6 +61,18 @@ public final class CodeSnapperConfig {
         return localTempRootPath;
     }
 
+    public boolean lenientPairMatch() {
+        return lenientPairMatch;
+    }
+
+    public boolean inferImpl() {
+        return inferImpl;
+    }
+
+    public boolean inferInterface() {
+        return inferInterface;
+    }
+
     public static final class Builder {
         private final static String DEFAULT_BRANCH_NAME = "main";
         private final Logger logger = LoggerFactory.getLogger(Builder.class);
@@ -64,6 +82,9 @@ public final class CodeSnapperConfig {
         private List<String> gitGroups;
         private String gitToken;
         private Path localTempRootPath;
+        private boolean lenientPairMatch;
+        private boolean inferImpl;
+        private boolean inferInterface;
 
         private Builder() {
         }
@@ -95,6 +116,21 @@ public final class CodeSnapperConfig {
 
         public Builder localTempRootPath(Path localTempRootPath) {
             this.localTempRootPath = localTempRootPath;
+            return this;
+        }
+
+        public Builder lenientPairMatch(boolean lenientPairMatch) {
+            this.lenientPairMatch = lenientPairMatch;
+            return this;
+        }
+
+        public Builder inferImpl(boolean inferImpl) {
+            this.inferImpl = inferImpl;
+            return this;
+        }
+
+        public Builder inferInterface(boolean inferInterface) {
+            this.inferInterface = inferInterface;
             return this;
         }
 

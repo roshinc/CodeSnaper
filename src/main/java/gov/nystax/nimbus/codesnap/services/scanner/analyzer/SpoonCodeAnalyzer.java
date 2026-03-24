@@ -50,7 +50,7 @@ public class SpoonCodeAnalyzer {
      * @throws Exception if there's an error during analysis
      */
     public void analyzeSourceCode(Path projectPath, ProjectInfo projectInfo) throws Exception {
-        analyzeSourceCode(projectPath, projectInfo, null);
+        analyzeSourceCode(projectPath, projectInfo, null, ServiceResolutionConfig.STRICT);
     }
 
     /**
@@ -63,7 +63,8 @@ public class SpoonCodeAnalyzer {
      * @param context     The scan context for progress reporting (optional)
      * @throws Exception if there's an error during analysis
      */
-    public void analyzeSourceCode(Path projectPath, ProjectInfo projectInfo, ScanContext context) throws Exception {
+    public void analyzeSourceCode(Path projectPath, ProjectInfo projectInfo, ScanContext context,
+                                   ServiceResolutionConfig resolutionConfig) throws Exception {
         Preconditions.checkNotNull(projectPath, "Project path cannot be null");
         Preconditions.checkNotNull(projectInfo, "ProjectInfo cannot be null");
 
@@ -140,7 +141,7 @@ public class SpoonCodeAnalyzer {
             }
 
             // Validate and set service components
-            validateAndSetServiceComponents(results, projectInfo);
+            validateAndSetServiceComponents(results, projectInfo, model, resolutionConfig);
 
             // Set function mappings (always set, empty map if no mappings)
             projectInfo.setFunctionMappings(results.functionMappings);
@@ -299,54 +300,253 @@ public class SpoonCodeAnalyzer {
 
     /**
      * Validates and sets the service interface and implementation.
-     * Validates that:
-     * - Exactly one service interface exists
-     * - Exactly one service implementation exists
-     * - The implementation actually implements the interface
+     * Supports multiple resolution strategies controlled by flags:
+     * - Strict (default): exactly one @SmartService + exactly one @SmartImpl
+     * - lenientPairMatch: if a valid impl→interface pair exists among multiple, use it
+     * - inferImpl: if only @SmartService found, search all classes for an implementor
+     * - inferInterface: if only @SmartImpl found, derive interface from impl's super-interfaces
      *
-     * @param results     The results from the unified analysis
-     * @param projectInfo The ProjectInfo to update
+     * @param results            The results from the unified analysis
+     * @param projectInfo        The ProjectInfo to update
+     * @param model              The Spoon model (needed for inferImpl to search all classes)
+     * @param resolutionConfig   Configuration controlling how service pairs are resolved
      */
     private void validateAndSetServiceComponents(
             UnifiedAnalysisVisitor.AnalysisResults results,
-            ProjectInfo projectInfo) {
+            ProjectInfo projectInfo,
+            CtModel model,
+            ServiceResolutionConfig resolutionConfig) {
 
         List<CtInterface<?>> serviceInterfaces = results.serviceInterfaces;
         List<CtClass<?>> serviceImplementations = results.serviceImplementations;
 
-        // Validate exactly one service interface
-        if (serviceInterfaces.isEmpty()) {
-            throw new IllegalStateException("No interface found with @" + AnalyzerConstants.SERVICE_ANNOTATION + " annotation");
+        CtInterface<?> resolvedInterface;
+        CtClass<?> resolvedImpl;
+
+        if (!serviceInterfaces.isEmpty() && !serviceImplementations.isEmpty()) {
+            // Both annotations found — resolve the pair
+            if (serviceInterfaces.size() == 1 && serviceImplementations.size() == 1) {
+                resolvedInterface = serviceInterfaces.getFirst();
+                resolvedImpl = serviceImplementations.getFirst();
+            } else if (resolutionConfig.lenientPairMatch()) {
+                Map.Entry<CtInterface<?>, CtClass<?>> pair = resolveLenientPair(serviceInterfaces, serviceImplementations);
+                resolvedInterface = pair.getKey();
+                resolvedImpl = pair.getValue();
+            } else {
+                // Strict mode — report the violation
+                if (serviceInterfaces.size() > 1) {
+                    String found = serviceInterfaces.stream()
+                            .map(CtTypeInformation::getQualifiedName)
+                            .collect(Collectors.joining(COMMA_SEPARATOR));
+                    throw new IllegalStateException(
+                            "Expected exactly one interface with @" + AnalyzerConstants.SERVICE_ANNOTATION
+                                    + " annotation, but found " + serviceInterfaces.size()
+                                    + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
+                }
+                String found = serviceImplementations.stream()
+                        .map(CtTypeInformation::getQualifiedName)
+                        .collect(Collectors.joining(COMMA_SEPARATOR));
+                throw new IllegalStateException(
+                        "Expected exactly one class with @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION
+                                + " annotation, but found " + serviceImplementations.size()
+                                + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
+            }
+        } else if (!serviceInterfaces.isEmpty()) {
+            // Only interface(s) found, no impl
+            if (!resolutionConfig.inferImpl()) {
+                throw new IllegalStateException(
+                        "No class found with @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " annotation");
+            }
+            resolvedInterface = pickSingleInterface(serviceInterfaces, resolutionConfig.lenientPairMatch());
+            resolvedImpl = inferImplFromInterface(resolvedInterface, model);
+        } else if (!serviceImplementations.isEmpty()) {
+            // Only impl(s) found, no interface
+            if (!resolutionConfig.inferInterface()) {
+                throw new IllegalStateException(
+                        "No interface found with @" + AnalyzerConstants.SERVICE_ANNOTATION + " annotation");
+            }
+            resolvedImpl = pickSingleImpl(serviceImplementations, resolutionConfig.lenientPairMatch());
+            resolvedInterface = inferInterfaceFromImpl(resolvedImpl);
+        } else {
+            throw new IllegalStateException(
+                    "No @" + AnalyzerConstants.SERVICE_ANNOTATION + " or @"
+                            + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " annotations found");
         }
-        if (serviceInterfaces.size() > 1) {
-            String foundInterfaces = serviceInterfaces.stream()
+
+        // Validate the resolved pair and apply to projectInfo
+        validateImplementation(resolvedInterface, resolvedImpl);
+        applyServiceComponents(resolvedInterface, resolvedImpl, projectInfo);
+    }
+
+    /**
+     * Resolves a valid interface/impl pair from multiple annotated types using lenient matching.
+     * Finds impl classes that actually implement one of the annotated interfaces.
+     *
+     * @return Entry with interface as key and implementation as value
+     * @throws IllegalStateException if zero or multiple valid pairs are found
+     */
+    private Map.Entry<CtInterface<?>, CtClass<?>> resolveLenientPair(
+            List<CtInterface<?>> interfaces, List<CtClass<?>> implementations) {
+
+        List<Map.Entry<CtInterface<?>, CtClass<?>>> validPairs = new ArrayList<>();
+
+        for (CtClass<?> impl : implementations) {
+            for (CtInterface<?> iface : interfaces) {
+                boolean implementsIt = impl.getSuperInterfaces().stream()
+                        .anyMatch(ref -> ref.getQualifiedName().equals(iface.getQualifiedName()));
+                if (implementsIt) {
+                    validPairs.add(Map.entry(iface, impl));
+                }
+            }
+        }
+
+        if (validPairs.isEmpty()) {
+            throw new IllegalStateException(
+                    "No valid @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION
+                            + " class implements any @" + AnalyzerConstants.SERVICE_ANNOTATION + " interface");
+        }
+        if (validPairs.size() > 1) {
+            String pairs = validPairs.stream()
+                    .map(p -> p.getValue().getQualifiedName() + " -> " + p.getKey().getQualifiedName())
+                    .collect(Collectors.joining(COMMA_SEPARATOR));
+            throw new IllegalStateException(
+                    "Ambiguous service resolution: found " + validPairs.size()
+                            + " valid pairs" + COLON_SEPARATOR + SPACE_OPEN_PAREN + pairs + CLOSE_PAREN);
+        }
+
+        Map.Entry<CtInterface<?>, CtClass<?>> pair = validPairs.getFirst();
+        logger.info("Lenient pair match resolved: {} implements {}",
+                pair.getValue().getQualifiedName(), pair.getKey().getQualifiedName());
+        return pair;
+    }
+
+    /**
+     * Picks a single interface from the list. If multiple exist and lenientPairMatch is not enabled, throws.
+     */
+    private CtInterface<?> pickSingleInterface(List<CtInterface<?>> interfaces, boolean lenientPairMatch) {
+        if (interfaces.size() == 1) {
+            return interfaces.getFirst();
+        }
+        if (!lenientPairMatch) {
+            String found = interfaces.stream()
                     .map(CtTypeInformation::getQualifiedName)
                     .collect(Collectors.joining(COMMA_SEPARATOR));
             throw new IllegalStateException(
-                    "Expected exactly one interface with @" + AnalyzerConstants.SERVICE_ANNOTATION + " annotation, but found "
-                            + serviceInterfaces.size() + COLON_SEPARATOR + SPACE_OPEN_PAREN + foundInterfaces + CLOSE_PAREN);
+                    "Expected exactly one interface with @" + AnalyzerConstants.SERVICE_ANNOTATION
+                            + " annotation, but found " + interfaces.size()
+                            + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
         }
+        // With lenient mode, if multiple @SmartService interfaces exist but we're inferring impl,
+        // we cannot determine which one to use
+        String found = interfaces.stream()
+                .map(CtTypeInformation::getQualifiedName)
+                .collect(Collectors.joining(COMMA_SEPARATOR));
+        throw new IllegalStateException(
+                "Cannot infer implementation: multiple @" + AnalyzerConstants.SERVICE_ANNOTATION
+                        + " interfaces found" + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
+    }
 
-        // Validate exactly one service implementation
-        if (serviceImplementations.isEmpty()) {
-            throw new IllegalStateException("No class found with @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " annotation");
+    /**
+     * Picks a single impl from the list. If multiple exist and lenientPairMatch is not enabled, throws.
+     */
+    private CtClass<?> pickSingleImpl(List<CtClass<?>> implementations, boolean lenientPairMatch) {
+        if (implementations.size() == 1) {
+            return implementations.getFirst();
         }
-        if (serviceImplementations.size() > 1) {
-            String foundImplementations = serviceImplementations.stream()
+        if (!lenientPairMatch) {
+            String found = implementations.stream()
                     .map(CtTypeInformation::getQualifiedName)
                     .collect(Collectors.joining(COMMA_SEPARATOR));
             throw new IllegalStateException(
-                    "Expected exactly one class with @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " annotation, but found "
-                            + serviceImplementations.size() + COLON_SEPARATOR + SPACE_OPEN_PAREN + foundImplementations + CLOSE_PAREN);
+                    "Expected exactly one class with @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION
+                            + " annotation, but found " + implementations.size()
+                            + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
+        }
+        String found = implementations.stream()
+                .map(CtTypeInformation::getQualifiedName)
+                .collect(Collectors.joining(COMMA_SEPARATOR));
+        throw new IllegalStateException(
+                "Cannot infer interface: multiple @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION
+                        + " classes found" + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
+    }
+
+    /**
+     * Infers the implementation class by searching all classes in the model for one
+     * that implements the given service interface.
+     */
+    private CtClass<?> inferImplFromInterface(CtInterface<?> serviceInterface, CtModel model) {
+        String interfaceName = serviceInterface.getQualifiedName();
+        logger.info("Inferring implementation for @{} interface: {}",
+                AnalyzerConstants.SERVICE_ANNOTATION, interfaceName);
+
+        List<CtClass<?>> allClasses = model.getElements(new TypeFilter<>(CtClass.class));
+        List<CtClass<?>> candidates = allClasses.stream()
+                .filter(cls -> cls.getSuperInterfaces().stream()
+                        .anyMatch(ref -> ref.getQualifiedName().equals(interfaceName)))
+                .collect(Collectors.toList());
+
+        if (candidates.isEmpty()) {
+            throw new IllegalStateException(
+                    "No class found that implements @" + AnalyzerConstants.SERVICE_ANNOTATION
+                            + " interface " + interfaceName);
+        }
+        if (candidates.size() > 1) {
+            String found = candidates.stream()
+                    .map(CtTypeInformation::getQualifiedName)
+                    .collect(Collectors.joining(COMMA_SEPARATOR));
+            throw new IllegalStateException(
+                    "Multiple classes implement @" + AnalyzerConstants.SERVICE_ANNOTATION
+                            + " interface " + interfaceName
+                            + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
         }
 
-        CtInterface<?> serviceInterface = serviceInterfaces.getFirst();
-        CtClass<?> serviceImplementation = serviceImplementations.getFirst();
+        CtClass<?> inferred = candidates.getFirst();
+        logger.info("Inferred implementation: {}", inferred.getQualifiedName());
+        return inferred;
+    }
 
-        // Validate that the implementation actually implements the interface
-        validateImplementation(serviceInterface, serviceImplementation);
+    /**
+     * Infers the service interface from the impl class's super-interfaces.
+     * Filters to project-local interfaces (those with declarations in the Spoon model).
+     */
+    private CtInterface<?> inferInterfaceFromImpl(CtClass<?> serviceImpl) {
+        String implName = serviceImpl.getQualifiedName();
+        logger.info("Inferring interface for @{} class: {}",
+                AnalyzerConstants.SERVICE_IMPL_ANNOTATION, implName);
 
-        // Set the found service interface and implementation
+        List<CtInterface<?>> candidates = serviceImpl.getSuperInterfaces().stream()
+                .map(ref -> ref.getTypeDeclaration())
+                .filter(decl -> decl != null && decl instanceof CtInterface<?>)
+                .map(decl -> (CtInterface<?>) decl)
+                .filter(iface -> !iface.isShadow() && iface.getPosition().isValidPosition())
+                .collect(Collectors.toList());
+
+        if (candidates.isEmpty()) {
+            throw new IllegalStateException(
+                    "@" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " class " + implName
+                            + " does not implement any project-local interface");
+        }
+        if (candidates.size() > 1) {
+            String found = candidates.stream()
+                    .map(CtTypeInformation::getQualifiedName)
+                    .collect(Collectors.joining(COMMA_SEPARATOR));
+            throw new IllegalStateException(
+                    "@" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " class " + implName
+                            + " implements multiple project-local interfaces"
+                            + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
+        }
+
+        CtInterface<?> inferred = candidates.getFirst();
+        logger.info("Inferred interface: {}", inferred.getQualifiedName());
+        return inferred;
+    }
+
+    /**
+     * Applies the resolved service interface and implementation to the ProjectInfo.
+     * Sets names, detects UI service, and builds method mappings.
+     */
+    private void applyServiceComponents(CtInterface<?> serviceInterface, CtClass<?> serviceImplementation,
+                                        ProjectInfo projectInfo) {
         String serviceInterfaceName = serviceInterface.getQualifiedName();
         String serviceImplementationName = serviceImplementation.getQualifiedName();
 
@@ -370,27 +570,21 @@ public class SpoonCodeAnalyzer {
         for (CtMethod<?> interfaceMethod : serviceInterface.getMethods()) {
             String interfaceMethodFQN = getMethodSignature(interfaceMethod);
 
-            // Find the overriding method in the implementation by matching the signature
             Optional<CtMethod<?>> implMethodOpt = findOverridingMethod(serviceImplementation, interfaceMethod);
 
             if (implMethodOpt.isPresent()) {
                 CtMethod<?> implMethod = implMethodOpt.get();
                 String implMethodFQN = getMethodSignature(implMethod);
                 methodImplementationMapping.put(interfaceMethodFQN, implMethodFQN);
-//                logger.debug("Found method implementation: {} -> {}", interfaceMethodFQN, implMethodFQN);
             } else {
                 logger.warn("No implementation for method {} found in {}", interfaceMethodFQN, serviceImplementationName);
             }
             if (isUIService) {
-                // Add a UI service name to the service interface method mapping
                 uiServiceMethodMapping.put(interfaceMethod.getSimpleName(), interfaceMethodFQN);
             }
         }
-        // Set implementation mappings (always set, empty map if no mappings)
         projectInfo.setMethodImplementationMappings(methodImplementationMapping);
         projectInfo.setUIServiceMethodMappings(uiServiceMethodMapping);
-
-
     }
 
     /**

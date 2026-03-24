@@ -5,6 +5,7 @@ import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
 import gov.nystax.nimbus.codesnap.services.GitService;
 import gov.nystax.nimbus.codesnap.services.scanner.NimbusServiceProjectScanner;
+import gov.nystax.nimbus.codesnap.services.scanner.analyzer.ServiceResolutionConfig;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanContext;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanProgressListener;
 import gov.nystax.nimbus.codesnap.util.FileUtils;
@@ -21,13 +22,15 @@ public class DefaultCodeSnapper implements CodeSnapper {
     private final NimbusServiceMeta nimbusServiceMeta;
     private final String commitHash;
     private final String gitToken;
+    private final ServiceResolutionConfig resolutionConfig;
 
     public DefaultCodeSnapper(CodeSnapperConfig config) {
         if (config != null) {
             this.nimbusServiceMeta = new NimbusServiceMeta(config);
             this.commitHash = config.commitHash();
             this.gitToken = config.gitToken();
-
+            this.resolutionConfig = new ServiceResolutionConfig(
+                    config.lenientPairMatch(), config.inferImpl(), config.inferInterface());
         } else {
             throw new RuntimeException("Invalid Snapper Config");
         }
@@ -61,7 +64,8 @@ public class DefaultCodeSnapper implements CodeSnapper {
 
             // Scan the project
             try {
-                NimbusServiceProjectScanner scanner = new NimbusServiceProjectScanner(this.nimbusServiceMeta, context);
+                NimbusServiceProjectScanner scanner = new NimbusServiceProjectScanner(
+                        this.nimbusServiceMeta, context, this.resolutionConfig);
                 projectSnap = scanner.scanProject();
             } catch (Exception e) {
                 logger.error("Error scanning project", e);

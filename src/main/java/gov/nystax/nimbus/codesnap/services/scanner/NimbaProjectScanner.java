@@ -4,7 +4,6 @@ import com.google.common.base.Preconditions;
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.AnalyzerConstants;
-import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenProjectAnalyzer;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionInvocation;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionUsage;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
@@ -32,7 +31,7 @@ import java.util.Map;
  * Scanner for projects that do not have SmartService/SmartImpl annotations.
  * Only detects function dependencies from pom.xml and their invocations in code.
  */
-public class NimbaProjectScanner {
+public class NimbaProjectScanner implements ProjectScanner {
 
     private static final Logger logger = LoggerFactory.getLogger(NimbaProjectScanner.class);
 
@@ -50,39 +49,16 @@ public class NimbaProjectScanner {
         this.context = context;
     }
 
-    public ProjectSnap scanProject() {
+    @Override
+    public ProjectSnap scanProject(ProjectInfo projectInfo) {
         Preconditions.checkNotNull(meta, "Project meta cannot be null");
         Preconditions.checkNotNull(context, "Scan context cannot be null");
+        Preconditions.checkNotNull(projectInfo, "Project info cannot be null");
 
         Path projectPath = meta.getLocalServicePomPath().getParent();
         Preconditions.checkArgument(Files.exists(projectPath), "Project path does not exist: " + projectPath);
 
         logger.info("Scanning Nimba project at: {}", projectPath);
-
-        ProjectInfo projectInfo = null;
-
-        try {
-            // Analyze Maven project structure and POM
-            context.phaseStart("Maven Analysis", "Analyzing pom.xml");
-            Instant pomStart = Instant.now();
-            MavenProjectAnalyzer mavenAnalyzer = new MavenProjectAnalyzer();
-            projectInfo = mavenAnalyzer.analyzeProject(projectPath);
-
-            Duration pomDuration = Duration.between(pomStart, Instant.now());
-            context.getMetrics().setPomAnalysisDuration(pomDuration);
-
-            if (projectInfo.getDependencies() != null) {
-                context.getMetrics().setDependenciesFound(projectInfo.getDependencies().size());
-            }
-            if (projectInfo.getSourceFiles() != null) {
-                context.getMetrics().setSourceFilesScanned(projectInfo.getSourceFiles().size());
-            }
-            context.phaseComplete("Maven Analysis", true);
-        } catch (Exception e) {
-            logger.error("Error scanning project maven project structure and POM", e);
-            context.error("Maven Analysis", e);
-            throw new RuntimeException("Error scanning project", e);
-        }
 
         try {
             // Analyze source code for function invocations only

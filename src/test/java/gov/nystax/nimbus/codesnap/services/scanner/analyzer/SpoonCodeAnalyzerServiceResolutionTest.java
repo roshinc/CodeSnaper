@@ -240,6 +240,32 @@ class SpoonCodeAnalyzerServiceResolutionTest {
     }
 
     @Test
+    void inferImpl_ignoresAbstractBaseAndFindsConcreteSubclass() throws Exception {
+        writeSource("sample/MyService.java", """
+                package sample;
+                import gov.nystax.nimbus.smart.SmartService;
+                @SmartService
+                public interface MyService { void doWork(); }
+                """);
+        writeSource("sample/AbstractMyServiceBase.java", """
+                package sample;
+                public abstract class AbstractMyServiceBase implements MyService {
+                }
+                """);
+        writeSource("sample/MyServiceImpl.java", """
+                package sample;
+                public class MyServiceImpl extends AbstractMyServiceBase {
+                    public void doWork() {}
+                }
+                """);
+
+        ProjectInfo info = analyze(false, true, false);
+
+        assertThat(info.getServiceInterface()).isEqualTo("sample.MyService");
+        assertThat(info.getServiceImplementation()).isEqualTo("sample.MyServiceImpl");
+    }
+
+    @Test
     void inferImpl_noImplementorFound_throws() throws IOException {
         writeSource("sample/MyService.java", """
                 package sample;

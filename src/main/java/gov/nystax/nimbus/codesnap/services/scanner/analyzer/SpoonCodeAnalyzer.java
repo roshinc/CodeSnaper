@@ -11,6 +11,7 @@ import spoon.reflect.CtModel;
 import spoon.reflect.code.CtInvocation;
 import spoon.reflect.declaration.*;
 import spoon.reflect.reference.CtExecutableReference;
+import spoon.reflect.reference.CtTypeReference;
 import spoon.reflect.visitor.filter.TypeFilter;
 
 import java.nio.file.Files;
@@ -481,8 +482,8 @@ public class SpoonCodeAnalyzer {
 
         List<CtClass<?>> allClasses = model.getElements(new TypeFilter<>(CtClass.class));
         List<CtClass<?>> candidates = allClasses.stream()
-                .filter(cls -> cls.getSuperInterfaces().stream()
-                        .anyMatch(ref -> ref.getQualifiedName().equals(interfaceName)))
+                .filter(cls -> !cls.getModifiers().contains(ModifierKind.ABSTRACT))
+                .filter(cls -> implementsInterfaceTransitively(cls, interfaceName, new HashSet<>()))
                 .collect(Collectors.toList());
 
         if (candidates.isEmpty()) {
@@ -503,6 +504,50 @@ public class SpoonCodeAnalyzer {
         CtClass<?> inferred = candidates.getFirst();
         logger.info("Inferred implementation: {}", inferred.getQualifiedName());
         return inferred;
+    }
+
+    private boolean implementsInterfaceTransitively(CtClass<?> candidate, String interfaceName, Set<String> visitedTypes) {
+        String candidateName = candidate.getQualifiedName();
+        if (candidateName != null && !visitedTypes.add(candidateName)) {
+            return false;
+        }
+
+        boolean directlyImplements = candidate.getSuperInterfaces().stream()
+                .anyMatch(ref -> isOrExtendsInterface(ref, interfaceName, visitedTypes));
+        if (directlyImplements) {
+            return true;
+        }
+
+        CtTypeReference<?> superClassRef = candidate.getSuperclass();
+        if (superClassRef == null) {
+            return false;
+        }
+
+        CtType<?> superType = superClassRef.getTypeDeclaration();
+        return superType instanceof CtClass<?> superClass
+                && implementsInterfaceTransitively(superClass, interfaceName, visitedTypes);
+    }
+
+    private boolean isOrExtendsInterface(CtTypeReference<?> typeRef, String interfaceName, Set<String> visitedTypes) {
+        if (typeRef == null) {
+            return false;
+        }
+
+        String qualifiedName = typeRef.getQualifiedName();
+        if (interfaceName.equals(qualifiedName)) {
+            return true;
+        }
+        if (qualifiedName != null && !visitedTypes.add(qualifiedName)) {
+            return false;
+        }
+
+        CtType<?> typeDeclaration = typeRef.getTypeDeclaration();
+        if (!(typeDeclaration instanceof CtInterface<?> interfaceDeclaration)) {
+            return false;
+        }
+
+        return interfaceDeclaration.getSuperInterfaces().stream()
+                .anyMatch(parentRef -> isOrExtendsInterface(parentRef, interfaceName, visitedTypes));
     }
 
     /**
@@ -598,9 +643,8 @@ public class SpoonCodeAnalyzer {
         String interfaceName = serviceInterface.getQualifiedName();
         String implementationName = serviceImplementation.getQualifiedName();
 
-        // Check if the class directly implements the interface
-        boolean implementsInterface = serviceImplementation.getSuperInterfaces().stream()
-                .anyMatch(iface -> iface.getQualifiedName().equals(interfaceName));
+        boolean implementsInterface = implementsInterfaceTransitively(
+                serviceImplementation, interfaceName, new HashSet<>());
 
         if (!implementsInterface) {
             throw new IllegalStateException(

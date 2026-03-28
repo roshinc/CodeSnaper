@@ -2,6 +2,7 @@ package gov.nystax.nimbus.codesnap;
 
 import gov.nystax.nimbus.codesnap.domain.CodeSnapperConfig;
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
+import gov.nystax.nimbus.codesnap.exception.*;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
 import gov.nystax.nimbus.codesnap.services.GitService;
 import gov.nystax.nimbus.codesnap.services.scanner.NimbaProjectScanner;
@@ -42,7 +43,7 @@ public class DefaultCodeSnapper implements CodeSnapper {
             this.mavenConfig = new MavenClasspathConfig(
                     config.resolveMavenClasspath(), config.mavenSettingsXmlPath());
         } else {
-            throw new RuntimeException("Invalid Snapper Config");
+            throw new ProcessingException("Invalid Snapper Config");
         }
 
     }
@@ -70,7 +71,7 @@ public class DefaultCodeSnapper implements CodeSnapper {
             } catch (Exception e) {
                 logger.error("Could not clone repo", e);
                 context.error("Git Clone", e);
-                throw new RuntimeException("Could not clone repo", e);
+                throw new CloneException("Could not clone repo", e);
             }
 
             try {
@@ -93,16 +94,19 @@ public class DefaultCodeSnapper implements CodeSnapper {
             } catch (Exception e) {
                 logger.error("Error scanning project maven project structure and POM", e);
                 context.error("Maven Analysis", e);
-                throw new RuntimeException("Error scanning project", e);
+                throw new ParseException("Error scanning project maven project structure and POM", e);
             }
 
             // Scan the project source
             try {
                 ProjectScanner scanner = createProjectScanner(projectInfo, context);
                 projectSnap = scanner.scanProject(projectInfo);
+            } catch (CodeSnapException e) {
+                logger.error("Error scanning project", e);
+                throw e;
             } catch (Exception e) {
                 logger.error("Error scanning project", e);
-                throw (RuntimeException) e;
+                throw new ScanException("Error scanning project", e);
             }
 
             // Delete the cloned repo

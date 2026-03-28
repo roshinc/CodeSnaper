@@ -1,6 +1,7 @@
 package gov.nystax.nimbus.codesnap.services;
 
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
+import gov.nystax.nimbus.codesnap.exception.CloneException;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanContext;
 import gov.nystax.nimbus.codesnap.util.FileUtils;
 import gov.nystax.nimbus.tools.get2git.GitRepositoryAccessor;
@@ -67,7 +68,7 @@ public class GitService {
                     logger.error("The local repo could not be deleted [{}]",
                             nimbusServiceMeta.getLocalServiceRootPath(), e);
                     context.error("Pre-Clone Cleanup", e);
-                    throw new RuntimeException("The local repo with the wrong commit hash could not be deleted", e);
+                    throw new CloneException("The local repo with the wrong commit hash could not be deleted", e);
                 }
             }
         }
@@ -80,7 +81,7 @@ public class GitService {
             cloner.cloneRemote();
 
         } catch (Exception ex) {
-            throw new RuntimeException("Could not clone remote", ex);
+            throw new CloneException("Could not clone remote", ex);
         }
 
         // Check if the commit hash we want
@@ -99,7 +100,7 @@ public class GitService {
             return;
         }
 
-        throw new RuntimeException("Unable to get the repo");
+        throw new CloneException("Unable to get the repo");
     }
 
 

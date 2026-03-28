@@ -1,6 +1,7 @@
 package gov.nystax.nimbus.codesnap;
 
 import gov.nystax.nimbus.codesnap.domain.CodeSnapperConfig;
+import gov.nystax.nimbus.codesnap.exception.ProcessingException;
 import gov.nystax.nimbus.codesnap.services.scanner.NimbaProjectScanner;
 import gov.nystax.nimbus.codesnap.services.scanner.NimbusServiceProjectScanner;
 import gov.nystax.nimbus.codesnap.services.scanner.ProjectScanner;
@@ -93,6 +94,13 @@ class DefaultCodeSnapperTest {
 
         assertThat(config.resolveMavenClasspath()).isTrue();
         assertThat(config.mavenSettingsXmlPath()).isEqualTo(settingsXml);
+    }
+
+    @Test
+    void constructor_throwsProcessingExceptionWhenConfigIsNull() {
+        assertThatThrownBy(() -> new DefaultCodeSnapper(null))
+                .isInstanceOf(ProcessingException.class)
+                .hasMessageContaining("Invalid Snapper Config");
     }
 
     private CodeSnapperConfig testConfig() {

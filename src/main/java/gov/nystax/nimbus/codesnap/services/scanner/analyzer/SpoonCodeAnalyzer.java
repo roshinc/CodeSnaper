@@ -1,6 +1,9 @@
 package gov.nystax.nimbus.codesnap.services.scanner.analyzer;
 
 import com.google.common.base.Preconditions;
+import gov.nystax.nimbus.codesnap.exception.CodeSnapException;
+import gov.nystax.nimbus.codesnap.exception.CodeViolationException;
+import gov.nystax.nimbus.codesnap.exception.ScanException;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.*;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanContext;
 import gov.nystax.nimbus.codesnap.services.scanner.visitor.UnifiedAnalysisVisitor;
@@ -173,15 +176,15 @@ public class SpoonCodeAnalyzer {
             projectInfo.setLegacyGatewayHttpClientInvocations(results.legacyGatewayHttpClientInvocations);
             logger.info("Found {} LegacyGatewayHttpClient.post() usage", results.legacyGatewayHttpClientInvocations.size());
 
-        } catch (IllegalStateException e) {
-            // Re-throw validation exceptions for service annotations
+        } catch (CodeSnapException e) {
+            // Re-throw typed exceptions (CodeViolationException, etc.)
             throw e;
         } catch (Exception e) {
             logger.error("Error analyzing source code", e);
             // Set counts to 0 if analysis fails
             projectInfo.setClassCount(DEFAULT_COUNT);
             projectInfo.setMethodCount(DEFAULT_COUNT);
-            throw e;
+            throw new ScanException("Error analyzing source code", e);
         }
     }
 
@@ -342,7 +345,7 @@ public class SpoonCodeAnalyzer {
                     String found = serviceInterfaces.stream()
                             .map(CtTypeInformation::getQualifiedName)
                             .collect(Collectors.joining(COMMA_SEPARATOR));
-                    throw new IllegalStateException(
+                    throw new CodeViolationException(
                             "Expected exactly one interface with @" + AnalyzerConstants.SERVICE_ANNOTATION
                                     + " annotation, but found " + serviceInterfaces.size()
                                     + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
@@ -350,7 +353,7 @@ public class SpoonCodeAnalyzer {
                 String found = serviceImplementations.stream()
                         .map(CtTypeInformation::getQualifiedName)
                         .collect(Collectors.joining(COMMA_SEPARATOR));
-                throw new IllegalStateException(
+                throw new CodeViolationException(
                         "Expected exactly one class with @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION
                                 + " annotation, but found " + serviceImplementations.size()
                                 + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
@@ -358,7 +361,7 @@ public class SpoonCodeAnalyzer {
         } else if (!serviceInterfaces.isEmpty()) {
             // Only interface(s) found, no impl
             if (!resolutionConfig.inferImpl()) {
-                throw new IllegalStateException(
+                throw new CodeViolationException(
                         "No class found with @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " annotation");
             }
             resolvedInterface = pickSingleInterface(serviceInterfaces, resolutionConfig.lenientPairMatch());
@@ -366,13 +369,13 @@ public class SpoonCodeAnalyzer {
         } else if (!serviceImplementations.isEmpty()) {
             // Only impl(s) found, no interface
             if (!resolutionConfig.inferInterface()) {
-                throw new IllegalStateException(
+                throw new CodeViolationException(
                         "No interface found with @" + AnalyzerConstants.SERVICE_ANNOTATION + " annotation");
             }
             resolvedImpl = pickSingleImpl(serviceImplementations, resolutionConfig.lenientPairMatch());
             resolvedInterface = inferInterfaceFromImpl(resolvedImpl);
         } else {
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "No @" + AnalyzerConstants.SERVICE_ANNOTATION + " or @"
                             + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " annotations found");
         }
@@ -405,7 +408,7 @@ public class SpoonCodeAnalyzer {
         }
 
         if (validPairs.isEmpty()) {
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "No valid @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION
                             + " class implements any @" + AnalyzerConstants.SERVICE_ANNOTATION + " interface");
         }
@@ -413,7 +416,7 @@ public class SpoonCodeAnalyzer {
             String pairs = validPairs.stream()
                     .map(p -> p.getValue().getQualifiedName() + " -> " + p.getKey().getQualifiedName())
                     .collect(Collectors.joining(COMMA_SEPARATOR));
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "Ambiguous service resolution: found " + validPairs.size()
                             + " valid pairs" + COLON_SEPARATOR + SPACE_OPEN_PAREN + pairs + CLOSE_PAREN);
         }
@@ -435,7 +438,7 @@ public class SpoonCodeAnalyzer {
             String found = interfaces.stream()
                     .map(CtTypeInformation::getQualifiedName)
                     .collect(Collectors.joining(COMMA_SEPARATOR));
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "Expected exactly one interface with @" + AnalyzerConstants.SERVICE_ANNOTATION
                             + " annotation, but found " + interfaces.size()
                             + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
@@ -445,7 +448,7 @@ public class SpoonCodeAnalyzer {
         String found = interfaces.stream()
                 .map(CtTypeInformation::getQualifiedName)
                 .collect(Collectors.joining(COMMA_SEPARATOR));
-        throw new IllegalStateException(
+        throw new CodeViolationException(
                 "Cannot infer implementation: multiple @" + AnalyzerConstants.SERVICE_ANNOTATION
                         + " interfaces found" + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
     }
@@ -461,7 +464,7 @@ public class SpoonCodeAnalyzer {
             String found = implementations.stream()
                     .map(CtTypeInformation::getQualifiedName)
                     .collect(Collectors.joining(COMMA_SEPARATOR));
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "Expected exactly one class with @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION
                             + " annotation, but found " + implementations.size()
                             + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
@@ -469,7 +472,7 @@ public class SpoonCodeAnalyzer {
         String found = implementations.stream()
                 .map(CtTypeInformation::getQualifiedName)
                 .collect(Collectors.joining(COMMA_SEPARATOR));
-        throw new IllegalStateException(
+        throw new CodeViolationException(
                 "Cannot infer interface: multiple @" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION
                         + " classes found" + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
     }
@@ -490,7 +493,7 @@ public class SpoonCodeAnalyzer {
                 .collect(Collectors.toList());
 
         if (candidates.isEmpty()) {
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "No class found that implements @" + AnalyzerConstants.SERVICE_ANNOTATION
                             + " interface " + interfaceName);
         }
@@ -498,7 +501,7 @@ public class SpoonCodeAnalyzer {
             String found = candidates.stream()
                     .map(CtTypeInformation::getQualifiedName)
                     .collect(Collectors.joining(COMMA_SEPARATOR));
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "Multiple classes implement @" + AnalyzerConstants.SERVICE_ANNOTATION
                             + " interface " + interfaceName
                             + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
@@ -570,7 +573,7 @@ public class SpoonCodeAnalyzer {
                 .collect(Collectors.toList());
 
         if (candidates.isEmpty()) {
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "@" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " class " + implName
                             + " does not implement any project-local interface");
         }
@@ -578,7 +581,7 @@ public class SpoonCodeAnalyzer {
             String found = candidates.stream()
                     .map(CtTypeInformation::getQualifiedName)
                     .collect(Collectors.joining(COMMA_SEPARATOR));
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "@" + AnalyzerConstants.SERVICE_IMPL_ANNOTATION + " class " + implName
                             + " implements multiple project-local interfaces"
                             + COLON_SEPARATOR + SPACE_OPEN_PAREN + found + CLOSE_PAREN);
@@ -640,7 +643,7 @@ public class SpoonCodeAnalyzer {
      *
      * @param serviceInterface      The service interface
      * @param serviceImplementation The service implementation
-     * @throws IllegalStateException if the implementation does not implement the interface
+     * @throws CodeViolationException if the implementation does not implement the interface
      */
     private void validateImplementation(CtInterface<?> serviceInterface, CtClass<?> serviceImplementation) {
         String interfaceName = serviceInterface.getQualifiedName();
@@ -650,7 +653,7 @@ public class SpoonCodeAnalyzer {
                 serviceImplementation, interfaceName, new HashSet<>());
 
         if (!implementsInterface) {
-            throw new IllegalStateException(
+            throw new CodeViolationException(
                     "Service implementation " + implementationName +
                             " does not implement service interface " + interfaceName);
         }

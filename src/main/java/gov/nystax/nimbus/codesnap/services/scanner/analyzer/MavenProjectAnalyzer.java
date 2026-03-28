@@ -1,6 +1,7 @@
 package gov.nystax.nimbus.codesnap.services.scanner.analyzer;
 
 import com.google.common.base.Preconditions;
+import gov.nystax.nimbus.codesnap.exception.ParseException;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
@@ -52,7 +53,7 @@ public class MavenProjectAnalyzer {
 
         Path pomPath = projectPath.resolve(POM_XML);
         if (!Files.exists(pomPath)) {
-            throw new IllegalArgumentException("No pom.xml found at: " + projectPath);
+            throw new ParseException("No pom.xml found at: " + projectPath);
         }
 
         ProjectInfo projectInfo = new ProjectInfo();

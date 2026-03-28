@@ -2,6 +2,8 @@ package gov.nystax.nimbus.codesnap.services.scanner;
 
 import com.google.common.base.Preconditions;
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
+import gov.nystax.nimbus.codesnap.exception.CodeSnapException;
+import gov.nystax.nimbus.codesnap.exception.ScanException;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenClasspathConfig;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.ServiceResolutionConfig;
@@ -73,10 +75,13 @@ public class NimbusServiceProjectScanner implements ProjectScanner {
             context.getMetrics().setMethodsAnalyzed(projectInfo.getMethodCount());
 
             context.phaseComplete("Code Analysis", true);
+        } catch (CodeSnapException e) {
+            context.error("Code Analysis", e);
+            throw e;
         } catch (Exception e) {
             logger.error("Error analyzing source code", e);
             context.error("Code Analysis", e);
-            throw new RuntimeException("Error analyzing source code", e);
+            throw new ScanException("Error analyzing source code", e);
         }
         //logger.info("Scan completed: {}", projectInfo);
         logger.info("Scan metrics: {}", context.getMetrics().getSummary());

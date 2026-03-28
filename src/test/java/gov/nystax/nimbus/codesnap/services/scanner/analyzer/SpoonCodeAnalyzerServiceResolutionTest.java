@@ -1,5 +1,6 @@
 package gov.nystax.nimbus.codesnap.services.scanner.analyzer;
 
+import gov.nystax.nimbus.codesnap.exception.CodeViolationException;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -107,7 +108,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(false, false, false))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("Expected exactly one interface");
     }
 
@@ -121,7 +122,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(false, false, false))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("No class found with @");
     }
 
@@ -137,7 +138,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(false, false, false))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("No interface found with @");
     }
 
@@ -212,7 +213,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(true, false, false))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("Ambiguous service resolution");
     }
 
@@ -275,7 +276,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(false, true, false))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("No class found that implements");
     }
 
@@ -301,7 +302,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(false, true, false))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("Multiple classes implement");
     }
 
@@ -349,7 +350,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(false, false, true))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("implements multiple project-local interfaces");
     }
 
@@ -366,7 +367,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(false, false, true))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("does not implement any project-local interface");
     }
 
@@ -380,7 +381,7 @@ class SpoonCodeAnalyzerServiceResolutionTest {
                 """);
 
         assertThatThrownBy(() -> analyze(false, false, false))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(CodeViolationException.class)
                 .hasMessageContaining("annotations found");
     }
 

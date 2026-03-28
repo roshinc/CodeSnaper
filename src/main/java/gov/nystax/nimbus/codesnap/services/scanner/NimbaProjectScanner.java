@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.AnalyzerConstants;
+import gov.nystax.nimbus.codesnap.services.scanner.analyzer.SpoonLauncherFactory;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionInvocation;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionUsage;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
@@ -43,10 +44,19 @@ public class NimbaProjectScanner implements ProjectScanner {
 
     private final NimbusServiceMeta meta;
     private final ScanContext context;
+    private final boolean resolveMavenClasspath;
+    private final Path mavenSettingsXmlPath;
 
     public NimbaProjectScanner(NimbusServiceMeta meta, ScanContext context) {
+        this(meta, context, false, null);
+    }
+
+    public NimbaProjectScanner(NimbusServiceMeta meta, ScanContext context,
+                               boolean resolveMavenClasspath, Path mavenSettingsXmlPath) {
         this.meta = meta;
         this.context = context;
+        this.resolveMavenClasspath = resolveMavenClasspath;
+        this.mavenSettingsXmlPath = mavenSettingsXmlPath;
     }
 
     @Override
@@ -95,11 +105,8 @@ public class NimbaProjectScanner implements ProjectScanner {
         logger.info("Analyzing source code at: {}", srcPath);
 
         // Build the Spoon model
-        Launcher launcher = new Launcher();
-        launcher.addInputResource(srcPath.toString());
-        launcher.getEnvironment().setNoClasspath(true);
-        launcher.getEnvironment().setAutoImports(true);
-        launcher.getEnvironment().setCommentEnabled(false);
+        Launcher launcher = SpoonLauncherFactory.createLauncher(
+                projectPath, srcPath, resolveMavenClasspath, mavenSettingsXmlPath);
 
         CtModel model = launcher.buildModel();
 

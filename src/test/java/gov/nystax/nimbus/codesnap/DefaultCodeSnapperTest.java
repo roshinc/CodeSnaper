@@ -10,10 +10,12 @@ import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanProgressLis
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DefaultCodeSnapperTest {
 
@@ -58,6 +60,39 @@ class DefaultCodeSnapperTest {
             ProjectScanner scanner = snapper.createProjectScanner(projectInfo, context);
             assertThat(scanner).isInstanceOf(NimbusServiceProjectScanner.class);
         }
+    }
+
+    @Test
+    void config_requiresSettingsXmlWhenMavenClasspathResolutionIsEnabled() {
+        assertThatThrownBy(() -> CodeSnapperConfig.builder()
+                .serviceId("sample-service")
+                .commitHash("abc123")
+                .gitGroups(List.of("sample-group"))
+                .gitToken("token")
+                .localTempRootPath(tempDir)
+                .resolveMavenClasspath(true)
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Maven settings.xml path is required");
+    }
+
+    @Test
+    void config_acceptsExistingSettingsXmlWhenMavenClasspathResolutionIsEnabled() throws Exception {
+        Path settingsXml = tempDir.resolve("settings.xml");
+        Files.writeString(settingsXml, "<settings/>");
+
+        CodeSnapperConfig config = CodeSnapperConfig.builder()
+                .serviceId("sample-service")
+                .commitHash("abc123")
+                .gitGroups(List.of("sample-group"))
+                .gitToken("token")
+                .localTempRootPath(tempDir)
+                .resolveMavenClasspath(true)
+                .mavenSettingsXmlPath(settingsXml)
+                .build();
+
+        assertThat(config.resolveMavenClasspath()).isTrue();
+        assertThat(config.mavenSettingsXmlPath()).isEqualTo(settingsXml);
     }
 
     private CodeSnapperConfig testConfig() {

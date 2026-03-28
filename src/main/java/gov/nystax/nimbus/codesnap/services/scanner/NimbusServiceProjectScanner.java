@@ -21,16 +21,27 @@ public class NimbusServiceProjectScanner implements ProjectScanner {
     private final NimbusServiceMeta meta;
     private final ScanContext context;
     private final ServiceResolutionConfig resolutionConfig;
+    private final boolean resolveMavenClasspath;
+    private final Path mavenSettingsXmlPath;
 
     public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context) {
-        this(meta, context, ServiceResolutionConfig.STRICT);
+        this(meta, context, ServiceResolutionConfig.STRICT, false, null);
     }
 
     public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context,
                                        ServiceResolutionConfig resolutionConfig) {
+        this(meta, context, resolutionConfig, false, null);
+    }
+
+    public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context,
+                                       ServiceResolutionConfig resolutionConfig,
+                                       boolean resolveMavenClasspath,
+                                       Path mavenSettingsXmlPath) {
         this.meta = meta;
         this.context = context;
         this.resolutionConfig = resolutionConfig;
+        this.resolveMavenClasspath = resolveMavenClasspath;
+        this.mavenSettingsXmlPath = mavenSettingsXmlPath;
     }
 
     @Override
@@ -50,7 +61,13 @@ public class NimbusServiceProjectScanner implements ProjectScanner {
             Instant codeStart = Instant.now();
 
             SpoonCodeAnalyzer spoonAnalyzer = new SpoonCodeAnalyzer();
-            spoonAnalyzer.analyzeSourceCode(projectPath, projectInfo, context, resolutionConfig);
+            spoonAnalyzer.analyzeSourceCode(
+                    projectPath,
+                    projectInfo,
+                    context,
+                    resolutionConfig,
+                    resolveMavenClasspath,
+                    mavenSettingsXmlPath);
 
             // Update complete metrics
             Duration codeDuration = Duration.between(codeStart, Instant.now());

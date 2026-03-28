@@ -5,6 +5,7 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -19,6 +20,8 @@ public final class CodeSnapperConfig {
     private final boolean lenientPairMatch;
     private final boolean inferImpl;
     private final boolean inferInterface;
+    private final boolean resolveMavenClasspath;
+    private final Path mavenSettingsXmlPath;
 
     private CodeSnapperConfig(Builder builder) {
         this.serviceId = builder.serviceId;
@@ -30,6 +33,8 @@ public final class CodeSnapperConfig {
         this.lenientPairMatch = builder.lenientPairMatch;
         this.inferImpl = builder.inferImpl;
         this.inferInterface = builder.inferInterface;
+        this.resolveMavenClasspath = builder.resolveMavenClasspath;
+        this.mavenSettingsXmlPath = builder.mavenSettingsXmlPath;
     }
 
     public static Builder builder() {
@@ -73,6 +78,14 @@ public final class CodeSnapperConfig {
         return inferInterface;
     }
 
+    public boolean resolveMavenClasspath() {
+        return resolveMavenClasspath;
+    }
+
+    public Path mavenSettingsXmlPath() {
+        return mavenSettingsXmlPath;
+    }
+
     public static final class Builder {
         private final static String DEFAULT_BRANCH_NAME = "main";
         private final Logger logger = LoggerFactory.getLogger(Builder.class);
@@ -85,6 +98,8 @@ public final class CodeSnapperConfig {
         private boolean lenientPairMatch;
         private boolean inferImpl;
         private boolean inferInterface;
+        private boolean resolveMavenClasspath;
+        private Path mavenSettingsXmlPath;
 
         private Builder() {
         }
@@ -134,6 +149,16 @@ public final class CodeSnapperConfig {
             return this;
         }
 
+        public Builder resolveMavenClasspath(boolean resolveMavenClasspath) {
+            this.resolveMavenClasspath = resolveMavenClasspath;
+            return this;
+        }
+
+        public Builder mavenSettingsXmlPath(Path mavenSettingsXmlPath) {
+            this.mavenSettingsXmlPath = mavenSettingsXmlPath;
+            return this;
+        }
+
         public CodeSnapperConfig build() {
             List<String> validationErrors = Lists.newArrayList();
             String msg = null;
@@ -155,6 +180,16 @@ public final class CodeSnapperConfig {
             }
             if (localTempRootPath == null) {
                 msg = "Local Temp Root Path is null";
+                logger.warn(msg);
+                validationErrors.add(msg);
+            }
+            if (resolveMavenClasspath && mavenSettingsXmlPath == null) {
+                msg = "Maven settings.xml path is required when resolveMavenClasspath is enabled";
+                logger.warn(msg);
+                validationErrors.add(msg);
+            }
+            if (resolveMavenClasspath && mavenSettingsXmlPath != null && !Files.isRegularFile(mavenSettingsXmlPath)) {
+                msg = "Maven settings.xml path does not exist: " + mavenSettingsXmlPath;
                 logger.warn(msg);
                 validationErrors.add(msg);
             }

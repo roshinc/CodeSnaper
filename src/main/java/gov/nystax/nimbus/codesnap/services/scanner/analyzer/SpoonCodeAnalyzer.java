@@ -51,7 +51,7 @@ public class SpoonCodeAnalyzer {
      * @throws Exception if there's an error during analysis
      */
     public void analyzeSourceCode(Path projectPath, ProjectInfo projectInfo) throws Exception {
-        analyzeSourceCode(projectPath, projectInfo, null, ServiceResolutionConfig.STRICT);
+        analyzeSourceCode(projectPath, projectInfo, null, ServiceResolutionConfig.STRICT, false, null);
     }
 
     /**
@@ -66,6 +66,13 @@ public class SpoonCodeAnalyzer {
      */
     public void analyzeSourceCode(Path projectPath, ProjectInfo projectInfo, ScanContext context,
                                    ServiceResolutionConfig resolutionConfig) throws Exception {
+        analyzeSourceCode(projectPath, projectInfo, context, resolutionConfig, false, null);
+    }
+
+    public void analyzeSourceCode(Path projectPath, ProjectInfo projectInfo, ScanContext context,
+                                  ServiceResolutionConfig resolutionConfig,
+                                  boolean resolveMavenClasspath,
+                                  Path mavenSettingsXmlPath) throws Exception {
         Preconditions.checkNotNull(projectPath, "Project path cannot be null");
         Preconditions.checkNotNull(projectInfo, "ProjectInfo cannot be null");
 
@@ -85,11 +92,8 @@ public class SpoonCodeAnalyzer {
 
         try {
             // Build the Spoon model
-            Launcher launcher = new Launcher();
-            launcher.addInputResource(srcPath.toString());
-            launcher.getEnvironment().setNoClasspath(true);
-            launcher.getEnvironment().setAutoImports(true);
-            launcher.getEnvironment().setCommentEnabled(false);
+            Launcher launcher = SpoonLauncherFactory.createLauncher(
+                    projectPath, srcPath, resolveMavenClasspath, mavenSettingsXmlPath);
 
             if (context != null) {
                 context.progress("Code Analysis", 2, 5, "Parsing Java files");

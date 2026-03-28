@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.AnalyzerConstants;
+import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenClasspathConfig;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.SpoonLauncherFactory;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionInvocation;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionUsage;
@@ -44,19 +45,17 @@ public class NimbaProjectScanner implements ProjectScanner {
 
     private final NimbusServiceMeta meta;
     private final ScanContext context;
-    private final boolean resolveMavenClasspath;
-    private final Path mavenSettingsXmlPath;
+    private final MavenClasspathConfig mavenConfig;
 
     public NimbaProjectScanner(NimbusServiceMeta meta, ScanContext context) {
-        this(meta, context, false, null);
+        this(meta, context, MavenClasspathConfig.DISABLED);
     }
 
     public NimbaProjectScanner(NimbusServiceMeta meta, ScanContext context,
-                               boolean resolveMavenClasspath, Path mavenSettingsXmlPath) {
+                               MavenClasspathConfig mavenConfig) {
         this.meta = meta;
         this.context = context;
-        this.resolveMavenClasspath = resolveMavenClasspath;
-        this.mavenSettingsXmlPath = mavenSettingsXmlPath;
+        this.mavenConfig = mavenConfig;
     }
 
     @Override
@@ -106,7 +105,7 @@ public class NimbaProjectScanner implements ProjectScanner {
 
         // Build the Spoon model
         Launcher launcher = SpoonLauncherFactory.createLauncher(
-                projectPath, srcPath, resolveMavenClasspath, mavenSettingsXmlPath);
+                projectPath, srcPath, mavenConfig);
 
         CtModel model = launcher.buildModel();
 

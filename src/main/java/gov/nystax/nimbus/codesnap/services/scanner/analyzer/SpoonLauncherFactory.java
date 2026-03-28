@@ -16,21 +16,22 @@ public final class SpoonLauncherFactory {
     }
 
     public static Launcher createLauncher(Path projectPath, Path srcPath,
-                                          boolean resolveMavenClasspath, Path mavenSettingsXmlPath) {
+                                          MavenClasspathConfig mavenConfig) {
         Preconditions.checkNotNull(projectPath, "projectPath cannot be null");
         Preconditions.checkNotNull(srcPath, "srcPath cannot be null");
+        Preconditions.checkNotNull(mavenConfig, "mavenConfig cannot be null");
 
         Launcher launcher = new Launcher();
         launcher.addInputResource(srcPath.toString());
         launcher.getEnvironment().setAutoImports(true);
         launcher.getEnvironment().setCommentEnabled(false);
 
-        if (!resolveMavenClasspath) {
+        if (!mavenConfig.enabled()) {
             launcher.getEnvironment().setNoClasspath(true);
             return launcher;
         }
 
-        List<Path> dependencyJars = new MavenDependencyResolver(mavenSettingsXmlPath)
+        List<Path> dependencyJars = new MavenDependencyResolver(mavenConfig.settingsXmlPath())
                 .resolveAndDownload(projectPath);
 
         if (dependencyJars.isEmpty()) {

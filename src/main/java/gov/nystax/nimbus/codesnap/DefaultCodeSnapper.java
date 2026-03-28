@@ -7,6 +7,7 @@ import gov.nystax.nimbus.codesnap.services.GitService;
 import gov.nystax.nimbus.codesnap.services.scanner.NimbaProjectScanner;
 import gov.nystax.nimbus.codesnap.services.scanner.NimbusServiceProjectScanner;
 import gov.nystax.nimbus.codesnap.services.scanner.ProjectScanner;
+import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenClasspathConfig;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenProjectAnalyzer;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.ServiceResolutionConfig;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
@@ -29,8 +30,7 @@ public class DefaultCodeSnapper implements CodeSnapper {
     private final String commitHash;
     private final String gitToken;
     private final ServiceResolutionConfig resolutionConfig;
-    private final boolean resolveMavenClasspath;
-    private final Path mavenSettingsXmlPath;
+    private final MavenClasspathConfig mavenConfig;
 
     public DefaultCodeSnapper(CodeSnapperConfig config) {
         if (config != null) {
@@ -39,8 +39,8 @@ public class DefaultCodeSnapper implements CodeSnapper {
             this.gitToken = config.gitToken();
             this.resolutionConfig = new ServiceResolutionConfig(
                     config.lenientPairMatch(), config.inferImpl(), config.inferInterface());
-            this.resolveMavenClasspath = config.resolveMavenClasspath();
-            this.mavenSettingsXmlPath = config.mavenSettingsXmlPath();
+            this.mavenConfig = new MavenClasspathConfig(
+                    config.resolveMavenClasspath(), config.mavenSettingsXmlPath());
         } else {
             throw new RuntimeException("Invalid Snapper Config");
         }
@@ -127,7 +127,7 @@ public class DefaultCodeSnapper implements CodeSnapper {
         if (isNimbaProject(projectInfo)) {
             logger.info("Selected Nimba project scanner for groupId={}", projectInfo.getGroupId());
             return new NimbaProjectScanner(
-                    this.nimbusServiceMeta, context, this.resolveMavenClasspath, this.mavenSettingsXmlPath);
+                    this.nimbusServiceMeta, context, this.mavenConfig);
         }
 
         logger.info("Selected Nimbus service scanner for groupId={}", projectInfo.getGroupId());
@@ -135,8 +135,7 @@ public class DefaultCodeSnapper implements CodeSnapper {
                 this.nimbusServiceMeta,
                 context,
                 this.resolutionConfig,
-                this.resolveMavenClasspath,
-                this.mavenSettingsXmlPath);
+                this.mavenConfig);
     }
 
     static boolean isNimbaProject(ProjectInfo projectInfo) {

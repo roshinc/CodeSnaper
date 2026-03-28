@@ -3,6 +3,7 @@ package gov.nystax.nimbus.codesnap.services.scanner;
 import com.google.common.base.Preconditions;
 import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
 import gov.nystax.nimbus.codesnap.domain.ProjectSnap;
+import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenClasspathConfig;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.ServiceResolutionConfig;
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.SpoonCodeAnalyzer;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
@@ -21,27 +22,24 @@ public class NimbusServiceProjectScanner implements ProjectScanner {
     private final NimbusServiceMeta meta;
     private final ScanContext context;
     private final ServiceResolutionConfig resolutionConfig;
-    private final boolean resolveMavenClasspath;
-    private final Path mavenSettingsXmlPath;
+    private final MavenClasspathConfig mavenConfig;
 
     public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context) {
-        this(meta, context, ServiceResolutionConfig.STRICT, false, null);
+        this(meta, context, ServiceResolutionConfig.STRICT, MavenClasspathConfig.DISABLED);
     }
 
     public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context,
                                        ServiceResolutionConfig resolutionConfig) {
-        this(meta, context, resolutionConfig, false, null);
+        this(meta, context, resolutionConfig, MavenClasspathConfig.DISABLED);
     }
 
     public NimbusServiceProjectScanner(NimbusServiceMeta meta, ScanContext context,
                                        ServiceResolutionConfig resolutionConfig,
-                                       boolean resolveMavenClasspath,
-                                       Path mavenSettingsXmlPath) {
+                                       MavenClasspathConfig mavenConfig) {
         this.meta = meta;
         this.context = context;
         this.resolutionConfig = resolutionConfig;
-        this.resolveMavenClasspath = resolveMavenClasspath;
-        this.mavenSettingsXmlPath = mavenSettingsXmlPath;
+        this.mavenConfig = mavenConfig;
     }
 
     @Override
@@ -66,8 +64,7 @@ public class NimbusServiceProjectScanner implements ProjectScanner {
                     projectInfo,
                     context,
                     resolutionConfig,
-                    resolveMavenClasspath,
-                    mavenSettingsXmlPath);
+                    mavenConfig);
 
             // Update complete metrics
             Duration codeDuration = Duration.between(codeStart, Instant.now());

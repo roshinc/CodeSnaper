@@ -1,11 +1,13 @@
 package gov.nystax.nimbus.codesnap.domain;
 
+import gov.nystax.nimbus.codesnap.exception.ProcessingException;
 import gov.nystax.nimbus.tools.get2git.domain.GitRepoURL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.MalformedURLException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 public class NimbusServiceMeta {
@@ -17,17 +19,26 @@ public class NimbusServiceMeta {
     private final Logger logger = LoggerFactory.getLogger(NimbusServiceMeta.class);
 
     public NimbusServiceMeta(CodeSnapperConfig config) {
+        this(config, Optional.empty());
+    }
+
+    NimbusServiceMeta(CodeSnapperConfig config, Optional<String> gitBaseUrl) {
         this.serviceId = config.serviceId();
         this.localServiceRootPath = createServiceRootPath(this.serviceId,
                 config.commitHash(), config.localTempRootPath());
         this.localServicePomPath = createServicePomPath(this.localServiceRootPath, this.serviceId);
 
         try {
-            gitRepoURL = new GitRepoURL(Optional.empty(), config.gitGroups(), this.serviceId);
+            gitRepoURL = createGitRepoURL(gitBaseUrl, config.gitGroups(), this.serviceId);
         } catch (MalformedURLException e) {
             logger.error("GitRepoURL malformed exception", e);
-            throw new RuntimeException(e);
+            throw new ProcessingException("Invalid Git repository metadata", e);
         }
+    }
+
+    GitRepoURL createGitRepoURL(Optional<String> gitBaseUrl, List<String> gitGroups, String serviceId)
+            throws MalformedURLException {
+        return new GitRepoURL(gitBaseUrl, gitGroups, serviceId);
     }
 
     public String getServiceId() {

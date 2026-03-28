@@ -1,17 +1,17 @@
 # CodeSnap Exception Handling
 
-All exceptions thrown by the CodeSnap library extend `CodeSnapException`, which itself extends `RuntimeException`. This means callers are never forced to use checked exception handling, but can opt in to structured error handling when they need it.
+All CodeSnap-thrown application exceptions extend `CodeSnapException`, which itself extends `RuntimeException`. This means callers are never forced to use checked exception handling, but can opt in to structured error handling when they need it. JVM `Error`s and non-CodeSnap throwables are outside this contract.
 
 ## Exception Hierarchy
 
-```
+```text
 RuntimeException
-  └── CodeSnapException (abstract)
-        ├── CloneException        (CLONE_ERROR)
-        ├── ScanException         (SCAN_ERROR)
-        ├── ParseException        (PARSE_ERROR)
-        ├── CodeViolationException (CODE_VIOLATION)
-        └── ProcessingException   (PROCESSING_ERROR)
+  \-- CodeSnapException (abstract)
+      +-- CloneException         (CLONE_ERROR)
+      +-- ScanException          (SCAN_ERROR)
+      +-- ParseException         (PARSE_ERROR)
+      +-- CodeViolationException (CODE_VIOLATION)
+      \-- ProcessingException    (PROCESSING_ERROR)
 ```
 
 ## Error Categories
@@ -82,6 +82,8 @@ Thrown for configuration and general processing issues that do not fit the categ
 | Trigger | Message |
 |---------|---------|
 | `null` config passed to `DefaultCodeSnapper` constructor | `Invalid Snapper Config` |
+| Invalid builder/configuration input | `<aggregated validation errors>` |
+| Invalid Git repository metadata during setup | `Invalid Git repository metadata` |
 
 ## Usage
 
@@ -129,9 +131,9 @@ try {
 }
 ```
 
-### Handling unknown errors
+### Handling non-CodeSnap throwables
 
-Exceptions that do not originate from CodeSnap (e.g. JVM errors, third-party library failures) will **not** be a `CodeSnapException`. A trailing `catch (Exception e)` handles those:
+JVM `Error`s and exceptions that do not originate from CodeSnap are outside the `CodeSnapException` contract. A trailing `catch (Exception e)` handles non-CodeSnap exceptions:
 
 ```java
 try {
@@ -139,6 +141,6 @@ try {
 } catch (CodeSnapException e) {
     // known library error
 } catch (Exception e) {
-    // truly unexpected / unknown error
+    // non-CodeSnap exception
 }
 ```

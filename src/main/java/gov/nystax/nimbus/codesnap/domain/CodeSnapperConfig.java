@@ -2,6 +2,7 @@ package gov.nystax.nimbus.codesnap.domain;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import gov.nystax.nimbus.codesnap.exception.ProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -194,7 +195,7 @@ public final class CodeSnapperConfig {
                 validationErrors.add(msg);
             }
             if (!validationErrors.isEmpty()) {
-                throw new IllegalArgumentException(validationErrors.toString());
+                throw new ProcessingException(validationErrors.toString());
             }
             // optional fields
             if (Strings.isNullOrEmpty(branch)) {

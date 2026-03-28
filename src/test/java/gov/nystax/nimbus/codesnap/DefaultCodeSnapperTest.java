@@ -1,6 +1,7 @@
 package gov.nystax.nimbus.codesnap;
 
 import gov.nystax.nimbus.codesnap.domain.CodeSnapperConfig;
+import gov.nystax.nimbus.codesnap.exception.CodeSnapErrorCategory;
 import gov.nystax.nimbus.codesnap.exception.ProcessingException;
 import gov.nystax.nimbus.codesnap.services.scanner.NimbaProjectScanner;
 import gov.nystax.nimbus.codesnap.services.scanner.NimbusServiceProjectScanner;
@@ -17,6 +18,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class DefaultCodeSnapperTest {
 
@@ -65,16 +67,18 @@ class DefaultCodeSnapperTest {
 
     @Test
     void config_requiresSettingsXmlWhenMavenClasspathResolutionIsEnabled() {
-        assertThatThrownBy(() -> CodeSnapperConfig.builder()
+        ProcessingException exception = catchThrowableOfType(() -> CodeSnapperConfig.builder()
                 .serviceId("sample-service")
                 .commitHash("abc123")
                 .gitGroups(List.of("sample-group"))
                 .gitToken("token")
                 .localTempRootPath(tempDir)
                 .resolveMavenClasspath(true)
-                .build())
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Maven settings.xml path is required");
+                .build(), ProcessingException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCategory()).isEqualTo(CodeSnapErrorCategory.PROCESSING_ERROR);
+        assertThat(exception).hasMessageContaining("Maven settings.xml path is required");
     }
 
     @Test
@@ -101,6 +105,38 @@ class DefaultCodeSnapperTest {
         assertThatThrownBy(() -> new DefaultCodeSnapper(null))
                 .isInstanceOf(ProcessingException.class)
                 .hasMessageContaining("Invalid Snapper Config");
+    }
+
+    @Test
+    void config_aggregatesMissingRequiredFieldsAsProcessingException() {
+        ProcessingException exception = catchThrowableOfType(() -> CodeSnapperConfig.builder().build(),
+                ProcessingException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCategory()).isEqualTo(CodeSnapErrorCategory.PROCESSING_ERROR);
+        assertThat(exception).hasMessageContaining("Service Id is null or empty");
+        assertThat(exception).hasMessageContaining("Git Groups are empty");
+        assertThat(exception).hasMessageContaining("Git Token is null or empty");
+        assertThat(exception).hasMessageContaining("Local Temp Root Path is null");
+    }
+
+    @Test
+    void config_rejectsMissingSettingsFileAsProcessingException() {
+        Path missingSettingsXml = tempDir.resolve("missing-settings.xml");
+
+        ProcessingException exception = catchThrowableOfType(() -> CodeSnapperConfig.builder()
+                .serviceId("sample-service")
+                .commitHash("abc123")
+                .gitGroups(List.of("sample-group"))
+                .gitToken("token")
+                .localTempRootPath(tempDir)
+                .resolveMavenClasspath(true)
+                .mavenSettingsXmlPath(missingSettingsXml)
+                .build(), ProcessingException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCategory()).isEqualTo(CodeSnapErrorCategory.PROCESSING_ERROR);
+        assertThat(exception).hasMessageContaining("Maven settings.xml path does not exist");
     }
 
     private CodeSnapperConfig testConfig() {

@@ -46,6 +46,14 @@ class CodeSnapExceptionTest {
     }
 
     @Test
+    void processingException_preservesOriginalCause() {
+        RuntimeException cause = new RuntimeException("root cause");
+        ProcessingException ex = new ProcessingException("processing failed", cause);
+        assertThat(ex.getCause()).isSameAs(cause);
+        assertThat(ex.getCategory()).isEqualTo(CodeSnapErrorCategory.PROCESSING_ERROR);
+    }
+
+    @Test
     void causeChaining_preservesOriginalCause() {
         RuntimeException cause = new RuntimeException("root cause");
         CloneException ex = new CloneException("clone failed", cause);

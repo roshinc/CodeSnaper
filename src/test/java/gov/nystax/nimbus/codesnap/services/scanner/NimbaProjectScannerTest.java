@@ -1,7 +1,11 @@
 package gov.nystax.nimbus.codesnap.services.scanner;
 
+import gov.nystax.nimbus.codesnap.domain.CodeSnapperConfig;
+import gov.nystax.nimbus.codesnap.domain.NimbusServiceMeta;
+import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenProjectAnalyzer;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionInvocation;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionUsage;
+import gov.nystax.nimbus.codesnap.services.scanner.domain.MethodReference;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanContext;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanProgressListener;
@@ -16,10 +20,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 class NimbaProjectScannerTest {
 
@@ -338,84 +344,116 @@ class NimbaProjectScannerTest {
 
     @Test
     void scanner_scansProjectWithFunctionDependenciesOnly(@TempDir Path tempDir) throws Exception {
-        // Set up a project directory with pom.xml and source code
-        Path projectDir = tempDir.resolve("myproject");
-        Files.createDirectories(projectDir);
+        ProjectInfo projectInfo = scanNimbaProject(
+                tempDir,
+                "myproject",
+                "my-nimba-project",
+                List.of("RetrieveWTPendFiling-func-client"),
+                Map.of("sample/MyProcessor.java", """
+                        package sample;
 
-        // Write pom.xml with a function dependency
-        String pomXml = """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <project xmlns="http://maven.apache.org/POM/4.0.0"
-                         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-                    <modelVersion>4.0.0</modelVersion>
-                    <groupId>gov.nystax.nimba</groupId>
-                    <artifactId>my-nimba-project</artifactId>
-                    <version>1.0.0</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>gov.nystax.functions</groupId>
-                            <artifactId>RetrieveWTPendFiling-func-client</artifactId>
-                            <version>1.0.0</version>
-                        </dependency>
-                    </dependencies>
-                </project>
-                """;
-        Files.writeString(projectDir.resolve("pom.xml"), pomXml);
+                        import gov.nystax.nimbus.function.client.RetrieveWTPendFilingFunction;
 
-        // Write Java source that invokes the function (Nimba-style: no .instance())
-        Path srcDir = projectDir.resolve("src/main/java/sample");
-        Files.createDirectories(srcDir);
-        String javaSource = """
-                package sample;
+                        public class MyProcessor {
+                            public void process() {
+                                RetrieveWTPendFilingFunction.execute("input");
+                            }
+                        }
+                        """));
 
-                import gov.nystax.nimbus.function.client.RetrieveWTPendFilingFunction;
-
-                public class MyProcessor {
-                    public void process() {
-                        RetrieveWTPendFilingFunction.execute("input");
-                    }
-                }
-                """;
-        Files.writeString(srcDir.resolve("MyProcessor.java"), javaSource);
-
-        // Create a mock NimbusServiceMeta-like setup by calling the scanner directly
-        // We need to test the scanner's analyzeSourceCode logic without NimbusServiceMeta
-        // So we test via the MavenProjectAnalyzer + visitor path
-
-        // First, verify Maven analysis works
-        var mavenAnalyzer = new gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenProjectAnalyzer();
-        ProjectInfo projectInfo = mavenAnalyzer.analyzeProject(projectDir);
+        String syntheticPackage = "gov.nystax.nimbus.codesnap.synthetic.nimba.my_nimba_project";
+        String interfaceMethod = syntheticPackage + ".NimbaImplicitService.my_nimba_project_implicitFunction()";
+        String implMethod = syntheticPackage + ".NimbaImplicitServiceImpl.my_nimba_project_implicitFunction()";
 
         assertThat(projectInfo.getGroupId()).isEqualTo("gov.nystax.nimba");
         assertThat(projectInfo.getArtifactId()).isEqualTo("my-nimba-project");
         assertThat(projectInfo.getFunctionDependencies()).hasSize(1);
         assertThat(projectInfo.getFunctionDependencies().getFirst())
                 .contains("RetrieveWTPendFiling-func-client");
+        assertThat(projectInfo.getServiceInterface()).isEqualTo(syntheticPackage + ".NimbaImplicitService");
+        assertThat(projectInfo.getServiceImplementation()).isEqualTo(syntheticPackage + ".NimbaImplicitServiceImpl");
+        assertThat(projectInfo.getFunctionMappings())
+                .containsOnly(entry("my_nimba_project_implicitFunction", interfaceMethod));
+        assertThat(projectInfo.getMethodImplementationMappings())
+                .containsOnly(entry(interfaceMethod, implMethod));
+        assertThat(projectInfo.isUIService()).isFalse();
+        assertThat(projectInfo.getUIServiceMethodMappings()).isEmpty();
+        assertThat(projectInfo.getFunctionUsages()).hasSize(1);
+        assertThat(projectInfo.getFunctionUsages().getFirst().getInvocations().getFirst().getCallChain())
+                .extracting(MethodReference::getMethodName)
+                .containsExactly(implMethod, "sample.MyProcessor.process()");
+    }
 
-        // Service-related fields should be null (no SmartService/SmartImpl)
-        assertThat(projectInfo.getServiceInterface()).isNull();
-        assertThat(projectInfo.getServiceImplementation()).isNull();
+    @Test
+    void scanner_prefixesSyntheticImplIntoFunctionCallChain(@TempDir Path tempDir) throws Exception {
+        ProjectInfo projectInfo = scanNimbaProject(
+                tempDir,
+                "call-chain-project",
+                "my-nimba-project",
+                List.of("RetrieveWTPendFiling-func-client"),
+                Map.of("sample/MyProcessor.java", """
+                        package sample;
 
-        // Now run code analysis using NimbaFunctionOnlyAnalysisVisitor
-        Path srcPath = projectDir.resolve("src/main/java");
-        Launcher launcher = new Launcher();
-        launcher.addInputResource(srcPath.toString());
-        launcher.getEnvironment().setNoClasspath(true);
-        launcher.getEnvironment().setAutoImports(true);
-        launcher.getEnvironment().setCommentEnabled(false);
-        CtModel model = launcher.buildModel();
+                        import gov.nystax.nimbus.function.client.RetrieveWTPendFilingFunction;
 
-        NimbaFunctionOnlyAnalysisVisitor visitor = new NimbaFunctionOnlyAnalysisVisitor(
-                projectInfo.getFunctionDependencies());
-        model.getRootPackage().accept(visitor);
+                        public class MyProcessor {
+                            public void entry() {
+                                doCall();
+                            }
 
-        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = visitor.getResults();
+                            void doCall() {
+                                RetrieveWTPendFilingFunction.execute("input");
+                            }
+                        }
+                        """));
 
-        assertThat(results.functionInvocations).hasSize(1);
-        assertThat(results.functionInvocations).containsKey("retrievewtpendfiling");
-        assertThat(results.typeCount).isEqualTo(1);
-        assertThat(results.methodCount).isEqualTo(1);
+        FunctionInvocation invocation = projectInfo.getFunctionUsages().getFirst().getInvocations().getFirst();
+        String implMethod = "gov.nystax.nimbus.codesnap.synthetic.nimba.my_nimba_project"
+                + ".NimbaImplicitServiceImpl.my_nimba_project_implicitFunction()";
+
+        assertThat(invocation.getEnclosingMethod().getMethodName()).isEqualTo("sample.MyProcessor.doCall()");
+        assertThat(invocation.getCallChain())
+                .extracting(MethodReference::getMethodName)
+                .containsExactly(implMethod, "sample.MyProcessor.entry()");
+    }
+
+    @Test
+    void scanner_usesSameSyntheticBridgeAcrossMultipleFunctionUsages(@TempDir Path tempDir) throws Exception {
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("sample/MyProcessor.java", """
+                package sample;
+
+                import gov.nystax.nimbus.function.client.RetrieveWTPendFilingFunction;
+                import gov.nystax.nimbus.function.client.UpdateRecordFunction;
+
+                public class MyProcessor {
+                    public void runRetrieve() {
+                        RetrieveWTPendFilingFunction.execute("input");
+                    }
+
+                    public void runUpdate() {
+                        UpdateRecordFunction.executeAsync("data");
+                    }
+                }
+                """);
+
+        ProjectInfo projectInfo = scanNimbaProject(
+                tempDir,
+                "multi-usage-project",
+                "my-nimba-project",
+                List.of("RetrieveWTPendFiling-func-client", "UpdateRecord-func-client"),
+                sources);
+
+        String implMethod = "gov.nystax.nimbus.codesnap.synthetic.nimba.my_nimba_project"
+                + ".NimbaImplicitServiceImpl.my_nimba_project_implicitFunction()";
+
+        assertThat(projectInfo.getFunctionUsages())
+                .extracting(FunctionUsage::getFunctionId)
+                .containsExactlyInAnyOrder("retrievewtpendfiling", "updaterecord");
+        assertThat(projectInfo.getFunctionUsages())
+                .allSatisfy(functionUsage -> assertThat(functionUsage.getInvocations())
+                        .allSatisfy(invocation -> assertThat(invocation.getCallChain().getFirst().getMethodName())
+                                .isEqualTo(implMethod)));
     }
 
     // ===== Helper =====
@@ -434,5 +472,69 @@ class NimbaProjectScannerTest {
         model.getRootPackage().accept(visitor);
 
         return visitor.getResults();
+    }
+
+    private ProjectInfo scanNimbaProject(Path tempDir,
+                                         String serviceId,
+                                         String artifactId,
+                                         List<String> functionDependencyArtifactIds,
+                                         Map<String, String> sources) throws Exception {
+        CodeSnapperConfig config = CodeSnapperConfig.builder()
+                .serviceId(serviceId)
+                .commitHash("test-commit")
+                .branch("main")
+                .gitGroups(List.of("test-group"))
+                .gitToken("test-token")
+                .localTempRootPath(tempDir)
+                .flatProjectStructure(true)
+                .build();
+
+        NimbusServiceMeta meta = new NimbusServiceMeta(config);
+        Path projectDir = meta.getLocalServiceRootPath();
+        Files.createDirectories(projectDir);
+        Files.writeString(meta.getLocalServicePomPath(), buildPomXml(artifactId, functionDependencyArtifactIds));
+
+        for (Map.Entry<String, String> sourceEntry : sources.entrySet()) {
+            Path sourcePath = projectDir.resolve("src/main/java").resolve(sourceEntry.getKey());
+            Files.createDirectories(sourcePath.getParent());
+            Files.writeString(sourcePath, sourceEntry.getValue());
+        }
+
+        MavenProjectAnalyzer mavenAnalyzer = new MavenProjectAnalyzer();
+        ProjectInfo projectInfo = mavenAnalyzer.analyzeProject(projectDir);
+
+        try (ScanContext context = new ScanContext("", ScanProgressListener.noOp())) {
+            NimbaProjectScanner scanner = new NimbaProjectScanner(meta, context);
+            scanner.scanProject(projectInfo);
+        }
+
+        return projectInfo;
+    }
+
+    private String buildPomXml(String artifactId, List<String> functionDependencyArtifactIds) {
+        String dependencyXml = functionDependencyArtifactIds.stream()
+                .map(dependencyArtifactId -> """
+                        <dependency>
+                            <groupId>gov.nystax.functions</groupId>
+                            <artifactId>%s</artifactId>
+                            <version>1.0.0</version>
+                        </dependency>
+                        """.formatted(dependencyArtifactId))
+                .reduce("", String::concat);
+
+        return """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <project xmlns="http://maven.apache.org/POM/4.0.0"
+                         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>gov.nystax.nimba</groupId>
+                    <artifactId>%s</artifactId>
+                    <version>1.0.0</version>
+                    <dependencies>
+                %s
+                    </dependencies>
+                </project>
+                """.formatted(artifactId, dependencyXml);
     }
 }

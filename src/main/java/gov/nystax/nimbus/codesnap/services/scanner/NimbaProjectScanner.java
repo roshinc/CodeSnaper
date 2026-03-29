@@ -10,6 +10,7 @@ import gov.nystax.nimbus.codesnap.services.scanner.analyzer.MavenClasspathConfig
 import gov.nystax.nimbus.codesnap.services.scanner.analyzer.SpoonLauncherFactory;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionInvocation;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionUsage;
+import gov.nystax.nimbus.codesnap.services.scanner.domain.MethodReference;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanContext;
 import gov.nystax.nimbus.codesnap.services.scanner.visitor.NimbaFunctionOnlyAnalysisVisitor;
@@ -27,9 +28,13 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Scanner for projects that do not have SmartService/SmartImpl annotations.
@@ -43,6 +48,12 @@ public class NimbaProjectScanner implements ProjectScanner {
     private static final String UNKNOWN_CLASS = "UnknownClass";
     private static final String PERIOD_SEPARATOR = ".";
     private static final String FUNCTION_CLASS_SUFFIX = "Function";
+    private static final String IMPLICIT_FUNCTION_SUFFIX = "_implicitFunction";
+    private static final String SYNTHETIC_PACKAGE_PREFIX = "gov.nystax.nimbus.codesnap.synthetic.nimba";
+    private static final String SYNTHETIC_INTERFACE_NAME = "NimbaImplicitService";
+    private static final String SYNTHETIC_IMPL_NAME = "NimbaImplicitServiceImpl";
+    private static final Pattern NON_ALPHANUMERIC_PATTERN = Pattern.compile("[^a-z0-9]+");
+    private static final Pattern MULTIPLE_UNDERSCORES_PATTERN = Pattern.compile("_+");
     private static final int DEFAULT_COUNT = 0;
 
     private final NimbusServiceMeta meta;
@@ -103,6 +114,9 @@ public class NimbaProjectScanner implements ProjectScanner {
             logger.warn("Source directory not found: {}", srcPath);
             projectInfo.setClassCount(DEFAULT_COUNT);
             projectInfo.setMethodCount(DEFAULT_COUNT);
+            List<FunctionUsage> functionUsages = Collections.emptyList();
+            projectInfo.setFunctionUsages(functionUsages);
+            applySyntheticImplicitServiceBridge(projectInfo, functionUsages);
             return;
         }
 
@@ -139,6 +153,7 @@ public class NimbaProjectScanner implements ProjectScanner {
 
         // Build function usages from invocations
         List<FunctionUsage> functionUsages = buildFunctionUsages(results);
+        applySyntheticImplicitServiceBridge(projectInfo, functionUsages);
         projectInfo.setFunctionUsages(functionUsages);
         logger.info("Found {} function usages", functionUsages.size());
     }
@@ -160,6 +175,62 @@ public class NimbaProjectScanner implements ProjectScanner {
         }
 
         return functionUsages;
+    }
+
+    private void applySyntheticImplicitServiceBridge(ProjectInfo projectInfo, List<FunctionUsage> functionUsages) {
+        String normalizedArtifactId = normalizeArtifactId(projectInfo.getArtifactId());
+        String implicitFunctionId = normalizedArtifactId + IMPLICIT_FUNCTION_SUFFIX;
+        String syntheticPackage = SYNTHETIC_PACKAGE_PREFIX + PERIOD_SEPARATOR + normalizedArtifactId;
+        String serviceInterface = syntheticPackage + PERIOD_SEPARATOR + SYNTHETIC_INTERFACE_NAME;
+        String serviceImplementation = syntheticPackage + PERIOD_SEPARATOR + SYNTHETIC_IMPL_NAME;
+        String interfaceMethodSignature = serviceInterface + PERIOD_SEPARATOR + implicitFunctionId + "()";
+        String implMethodSignature = serviceImplementation + PERIOD_SEPARATOR + implicitFunctionId + "()";
+
+        projectInfo.setServiceInterface(serviceInterface);
+        projectInfo.setServiceImplementation(serviceImplementation);
+        projectInfo.setFunctionMappings(new LinkedHashMap<>(Map.of(implicitFunctionId, interfaceMethodSignature)));
+        projectInfo.setMethodImplementationMappings(
+                new LinkedHashMap<>(Map.of(interfaceMethodSignature, implMethodSignature)));
+        projectInfo.setUIService(false);
+        projectInfo.setUIServiceMethodMappings(Collections.emptyMap());
+
+        prependSyntheticImplToCallChains(functionUsages, implMethodSignature);
+    }
+
+    private void prependSyntheticImplToCallChains(List<FunctionUsage> functionUsages, String implMethodSignature) {
+        MethodReference syntheticImplMethod = new MethodReference(
+                implMethodSignature, MethodReference.MethodAccessModifier.PUBLIC);
+
+        for (FunctionUsage functionUsage : functionUsages) {
+            List<FunctionInvocation> invocations = functionUsage.getInvocations();
+            if (invocations == null) {
+                continue;
+            }
+
+            for (FunctionInvocation invocation : invocations) {
+                List<MethodReference> existingCallChain = invocation.getCallChain();
+                List<MethodReference> updatedCallChain = new ArrayList<>();
+                updatedCallChain.add(syntheticImplMethod);
+
+                if (existingCallChain != null) {
+                    for (MethodReference callChainEntry : existingCallChain) {
+                        if (!syntheticImplMethod.equals(callChainEntry)) {
+                            updatedCallChain.add(callChainEntry);
+                        }
+                    }
+                }
+
+                invocation.setCallChain(updatedCallChain);
+            }
+        }
+    }
+
+    private String normalizeArtifactId(String artifactId) {
+        String normalized = artifactId == null ? "" : artifactId.toLowerCase(Locale.ROOT);
+        normalized = NON_ALPHANUMERIC_PATTERN.matcher(normalized).replaceAll("_");
+        normalized = MULTIPLE_UNDERSCORES_PATTERN.matcher(normalized).replaceAll("_");
+        normalized = normalized.replaceAll("^_+|_+$", "");
+        return normalized.isEmpty() ? "nimba_project" : normalized;
     }
 
     private Map<String, List<CtMethod<?>>> precomputeMethodCallers(CtModel model) {

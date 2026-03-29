@@ -24,6 +24,7 @@ public final class CodeSnapperConfig {
     private final boolean resolveMavenClasspath;
     private final Path mavenSettingsXmlPath;
     private final Path mavenHomePath;
+    private final boolean flatProjectStructure;
 
     private CodeSnapperConfig(Builder builder) {
         this.serviceId = builder.serviceId;
@@ -38,6 +39,7 @@ public final class CodeSnapperConfig {
         this.resolveMavenClasspath = builder.resolveMavenClasspath;
         this.mavenSettingsXmlPath = builder.mavenSettingsXmlPath;
         this.mavenHomePath = builder.mavenHomePath;
+        this.flatProjectStructure = builder.flatProjectStructure;
     }
 
     public static Builder builder() {
@@ -93,6 +95,10 @@ public final class CodeSnapperConfig {
         return mavenHomePath;
     }
 
+    public boolean flatProjectStructure() {
+        return flatProjectStructure;
+    }
+
     public static final class Builder {
         private final static String DEFAULT_BRANCH_NAME = "main";
         private final Logger logger = LoggerFactory.getLogger(Builder.class);
@@ -108,6 +114,7 @@ public final class CodeSnapperConfig {
         private boolean resolveMavenClasspath;
         private Path mavenSettingsXmlPath;
         private Path mavenHomePath;
+        private boolean flatProjectStructure;
 
         private Builder() {
         }
@@ -169,6 +176,11 @@ public final class CodeSnapperConfig {
 
         public Builder mavenHomePath(Path mavenHomePath) {
             this.mavenHomePath = mavenHomePath;
+            return this;
+        }
+
+        public Builder flatProjectStructure(boolean flatProjectStructure) {
+            this.flatProjectStructure = flatProjectStructure;
             return this;
         }
 

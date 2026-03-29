@@ -19,6 +19,44 @@ class NimbusServiceMetaTest {
     Path tempDir;
 
     @Test
+    void pomPath_usesNestedStructureByDefault() {
+        CodeSnapperConfig config = CodeSnapperConfig.builder()
+                .serviceId("sample-service")
+                .commitHash("abc123")
+                .gitGroups(List.of("sample-group"))
+                .gitToken("token")
+                .localTempRootPath(tempDir)
+                .build();
+
+        NimbusServiceMeta meta = new NimbusServiceMeta(config);
+
+        assertThat(meta.getLocalServiceRootPath())
+                .isEqualTo(tempDir.resolve("abc123").resolve("sample-service"));
+        assertThat(meta.getLocalServicePomPath())
+                .isEqualTo(tempDir.resolve("abc123").resolve("sample-service")
+                        .resolve("sample-service").resolve("pom.xml"));
+    }
+
+    @Test
+    void pomPath_usesFlatStructureWhenFlagIsTrue() {
+        CodeSnapperConfig config = CodeSnapperConfig.builder()
+                .serviceId("sample-service")
+                .commitHash("abc123")
+                .gitGroups(List.of("sample-group"))
+                .gitToken("token")
+                .localTempRootPath(tempDir)
+                .flatProjectStructure(true)
+                .build();
+
+        NimbusServiceMeta meta = new NimbusServiceMeta(config);
+
+        assertThat(meta.getLocalServiceRootPath())
+                .isEqualTo(tempDir.resolve("abc123").resolve("sample-service"));
+        assertThat(meta.getLocalServicePomPath())
+                .isEqualTo(tempDir.resolve("abc123").resolve("sample-service").resolve("pom.xml"));
+    }
+
+    @Test
     void constructor_wrapsMalformedGitMetadataAsProcessingException() {
         CodeSnapperConfig config = CodeSnapperConfig.builder()
                 .serviceId("sample-service")

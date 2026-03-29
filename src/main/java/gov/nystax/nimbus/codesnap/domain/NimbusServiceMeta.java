@@ -26,7 +26,8 @@ public class NimbusServiceMeta {
         this.serviceId = config.serviceId();
         this.localServiceRootPath = createServiceRootPath(this.serviceId,
                 config.commitHash(), config.localTempRootPath());
-        this.localServicePomPath = createServicePomPath(this.localServiceRootPath, this.serviceId);
+        this.localServicePomPath = createServicePomPath(this.localServiceRootPath, this.serviceId,
+                config.flatProjectStructure());
 
         try {
             gitRepoURL = createGitRepoURL(gitBaseUrl, config.gitGroups(), this.serviceId);
@@ -61,7 +62,10 @@ public class NimbusServiceMeta {
         return localPath.resolve(commitHash).resolve(repoName);
     }
 
-    private Path createServicePomPath(Path serviceRoot, String repoName) {
+    private Path createServicePomPath(Path serviceRoot, String repoName, boolean flatProjectStructure) {
+        if (flatProjectStructure) {
+            return serviceRoot.resolve("pom.xml");
+        }
         return serviceRoot.resolve(repoName).resolve("pom.xml");
     }
 

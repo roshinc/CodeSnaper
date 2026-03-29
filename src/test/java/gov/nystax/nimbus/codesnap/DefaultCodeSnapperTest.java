@@ -101,6 +101,26 @@ class DefaultCodeSnapperTest {
     }
 
     @Test
+    void config_acceptsOptionalMavenHomePath() throws Exception {
+        Path settingsXml = tempDir.resolve("settings.xml");
+        Path mavenHome = Files.createDirectories(tempDir.resolve("apache-maven"));
+        Files.writeString(settingsXml, "<settings/>");
+
+        CodeSnapperConfig config = CodeSnapperConfig.builder()
+                .serviceId("sample-service")
+                .commitHash("abc123")
+                .gitGroups(List.of("sample-group"))
+                .gitToken("token")
+                .localTempRootPath(tempDir)
+                .resolveMavenClasspath(true)
+                .mavenSettingsXmlPath(settingsXml)
+                .mavenHomePath(mavenHome)
+                .build();
+
+        assertThat(config.mavenHomePath()).isEqualTo(mavenHome);
+    }
+
+    @Test
     void constructor_throwsProcessingExceptionWhenConfigIsNull() {
         assertThatThrownBy(() -> new DefaultCodeSnapper(null))
                 .isInstanceOf(ProcessingException.class)
@@ -137,6 +157,28 @@ class DefaultCodeSnapperTest {
         assertThat(exception).isNotNull();
         assertThat(exception.getCategory()).isEqualTo(CodeSnapErrorCategory.PROCESSING_ERROR);
         assertThat(exception).hasMessageContaining("Maven settings.xml path does not exist");
+    }
+
+    @Test
+    void config_rejectsMissingMavenHomePathAsProcessingException() throws Exception {
+        Path settingsXml = tempDir.resolve("settings.xml");
+        Path missingMavenHome = tempDir.resolve("missing-maven-home");
+        Files.writeString(settingsXml, "<settings/>");
+
+        ProcessingException exception = catchThrowableOfType(() -> CodeSnapperConfig.builder()
+                .serviceId("sample-service")
+                .commitHash("abc123")
+                .gitGroups(List.of("sample-group"))
+                .gitToken("token")
+                .localTempRootPath(tempDir)
+                .resolveMavenClasspath(true)
+                .mavenSettingsXmlPath(settingsXml)
+                .mavenHomePath(missingMavenHome)
+                .build(), ProcessingException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCategory()).isEqualTo(CodeSnapErrorCategory.PROCESSING_ERROR);
+        assertThat(exception).hasMessageContaining("Maven home path does not exist");
     }
 
     private CodeSnapperConfig testConfig() {

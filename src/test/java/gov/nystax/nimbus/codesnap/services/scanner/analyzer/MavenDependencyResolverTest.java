@@ -41,6 +41,41 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    void constructor_acceptsExistingMavenHomePath() throws Exception {
+        Path settingsXml = createSettingsXml();
+        Path mavenHome = Files.createDirectories(tempDir.resolve("apache-maven"));
+
+        MavenDependencyResolver resolver = new MavenDependencyResolver(settingsXml, mavenHome);
+
+        assertThat(resolver).isNotNull();
+        assertThat(resolver.resolveMavenExecutable()).startsWith(mavenHome.toAbsolutePath().toString());
+    }
+
+    @Test
+    void constructor_throwsOnNonexistentMavenHomePath() throws Exception {
+        Path settingsXml = createSettingsXml();
+        Path nonexistentMavenHome = tempDir.resolve("missing-maven-home");
+
+        assertThatThrownBy(() -> new MavenDependencyResolver(settingsXml, nonexistentMavenHome))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("mavenHome path does not exist");
+    }
+
+    @Test
+    void buildMavenCommand_usesSuppliedMavenHomeExecutable() throws Exception {
+        Path settingsXml = createSettingsXml();
+        Path mavenHome = Files.createDirectories(tempDir.resolve("apache-maven"));
+        Path projectDir = Files.createDirectories(tempDir.resolve("project"));
+        Path outputDir = Files.createDirectories(projectDir.resolve("target/codesnap-deps"));
+        MavenDependencyResolver resolver = new MavenDependencyResolver(settingsXml, mavenHome);
+
+        List<String> command = resolver.buildMavenCommand(projectDir, outputDir);
+
+        assertThat(command.get(0)).isEqualTo(resolver.resolveMavenExecutable());
+        assertThat(command.get(0)).startsWith(mavenHome.toAbsolutePath().toString());
+    }
+
+    @Test
     void resolveAndDownload_returnsEmptyListWhenMavenFails() throws Exception {
         Path settingsXml = createSettingsXml();
         MavenDependencyResolver resolver = new MavenDependencyResolver(settingsXml);

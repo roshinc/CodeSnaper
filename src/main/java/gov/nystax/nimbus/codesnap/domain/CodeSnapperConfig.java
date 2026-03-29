@@ -23,6 +23,7 @@ public final class CodeSnapperConfig {
     private final boolean inferInterface;
     private final boolean resolveMavenClasspath;
     private final Path mavenSettingsXmlPath;
+    private final Path mavenHomePath;
 
     private CodeSnapperConfig(Builder builder) {
         this.serviceId = builder.serviceId;
@@ -36,6 +37,7 @@ public final class CodeSnapperConfig {
         this.inferInterface = builder.inferInterface;
         this.resolveMavenClasspath = builder.resolveMavenClasspath;
         this.mavenSettingsXmlPath = builder.mavenSettingsXmlPath;
+        this.mavenHomePath = builder.mavenHomePath;
     }
 
     public static Builder builder() {
@@ -87,6 +89,10 @@ public final class CodeSnapperConfig {
         return mavenSettingsXmlPath;
     }
 
+    public Path mavenHomePath() {
+        return mavenHomePath;
+    }
+
     public static final class Builder {
         private final static String DEFAULT_BRANCH_NAME = "main";
         private final Logger logger = LoggerFactory.getLogger(Builder.class);
@@ -101,6 +107,7 @@ public final class CodeSnapperConfig {
         private boolean inferInterface;
         private boolean resolveMavenClasspath;
         private Path mavenSettingsXmlPath;
+        private Path mavenHomePath;
 
         private Builder() {
         }
@@ -160,6 +167,11 @@ public final class CodeSnapperConfig {
             return this;
         }
 
+        public Builder mavenHomePath(Path mavenHomePath) {
+            this.mavenHomePath = mavenHomePath;
+            return this;
+        }
+
         public CodeSnapperConfig build() {
             List<String> validationErrors = Lists.newArrayList();
             String msg = null;
@@ -191,6 +203,11 @@ public final class CodeSnapperConfig {
             }
             if (resolveMavenClasspath && mavenSettingsXmlPath != null && !Files.isRegularFile(mavenSettingsXmlPath)) {
                 msg = "Maven settings.xml path does not exist: " + mavenSettingsXmlPath;
+                logger.warn(msg);
+                validationErrors.add(msg);
+            }
+            if (mavenHomePath != null && !Files.isDirectory(mavenHomePath)) {
+                msg = "Maven home path does not exist: " + mavenHomePath;
                 logger.warn(msg);
                 validationErrors.add(msg);
             }

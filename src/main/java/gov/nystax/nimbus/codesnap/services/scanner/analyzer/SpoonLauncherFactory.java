@@ -31,7 +31,9 @@ public final class SpoonLauncherFactory {
             return launcher;
         }
 
-        List<Path> dependencyJars = new MavenDependencyResolver(mavenConfig.settingsXmlPath())
+        List<Path> dependencyJars = new MavenDependencyResolver(
+                mavenConfig.settingsXmlPath(),
+                mavenConfig.mavenHomePath())
                 .resolveAndDownload(projectPath);
 
         if (dependencyJars.isEmpty()) {

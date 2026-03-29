@@ -26,12 +26,20 @@ public class MavenDependencyResolver {
     private static final String OUTPUT_DIR_NAME = "codesnap-deps";
 
     private final Path settingsFile;
+    private final Path mavenHomePath;
 
     public MavenDependencyResolver(Path settingsFile) {
+        this(settingsFile, null);
+    }
+
+    public MavenDependencyResolver(Path settingsFile, Path mavenHomePath) {
         Preconditions.checkNotNull(settingsFile, "settings.xml path cannot be null");
         Preconditions.checkArgument(Files.isRegularFile(settingsFile),
                 "settings.xml path does not exist: %s", settingsFile);
+        Preconditions.checkArgument(mavenHomePath == null || Files.isDirectory(mavenHomePath),
+                "mavenHome path does not exist: %s", mavenHomePath);
         this.settingsFile = settingsFile;
+        this.mavenHomePath = mavenHomePath;
     }
 
     public List<Path> resolveAndDownload(Path projectPath) {
@@ -96,9 +104,9 @@ public class MavenDependencyResolver {
         return output.toString();
     }
 
-    private List<String> buildMavenCommand(Path projectPath, Path outputDir) {
+    List<String> buildMavenCommand(Path projectPath, Path outputDir) {
         List<String> command = new ArrayList<>();
-        command.add(isWindows() ? "mvn.cmd" : "mvn");
+        command.add(resolveMavenExecutable());
         command.add("dependency:copy-dependencies");
         command.add("-DoutputDirectory=" + outputDir.toAbsolutePath());
         command.add("-DincludeScope=compile");
@@ -109,6 +117,17 @@ public class MavenDependencyResolver {
         command.add("-f");
         command.add(projectPath.resolve("pom.xml").toAbsolutePath().toString());
         return command;
+    }
+
+    String resolveMavenExecutable() {
+        if (mavenHomePath == null) {
+            return defaultMavenExecutableName();
+        }
+
+        return mavenHomePath.resolve("bin")
+                .resolve(defaultMavenExecutableName())
+                .toAbsolutePath()
+                .toString();
     }
 
     private List<Path> collectJars(Path outputDir) {
@@ -126,5 +145,9 @@ public class MavenDependencyResolver {
 
     private boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    private String defaultMavenExecutableName() {
+        return isWindows() ? "mvn.cmd" : "mvn";
     }
 }

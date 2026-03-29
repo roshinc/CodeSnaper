@@ -41,7 +41,7 @@ public class DefaultCodeSnapper implements CodeSnapper {
             this.resolutionConfig = new ServiceResolutionConfig(
                     config.lenientPairMatch(), config.inferImpl(), config.inferInterface());
             this.mavenConfig = new MavenClasspathConfig(
-                    config.resolveMavenClasspath(), config.mavenSettingsXmlPath());
+                    config.resolveMavenClasspath(), config.mavenSettingsXmlPath(), config.mavenHomePath());
         } else {
             throw new ProcessingException("Invalid Snapper Config");
         }

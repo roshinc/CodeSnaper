@@ -12,7 +12,7 @@ import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionInvocation;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionUsage;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanContext;
-import gov.nystax.nimbus.codesnap.services.scanner.visitor.FunctionOnlyAnalysisVisitor;
+import gov.nystax.nimbus.codesnap.services.scanner.visitor.NimbaFunctionOnlyAnalysisVisitor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spoon.Launcher;
@@ -118,14 +118,14 @@ public class NimbaProjectScanner implements ProjectScanner {
         Map<String, List<CtMethod<?>>> methodToCallers = precomputeMethodCallers(model);
 
         // Create and run the function-only visitor
-        FunctionOnlyAnalysisVisitor visitor = new FunctionOnlyAnalysisVisitor(
+        NimbaFunctionOnlyAnalysisVisitor visitor = new NimbaFunctionOnlyAnalysisVisitor(
                 projectInfo.getFunctionDependencies());
         visitor.setMethodToCallers(methodToCallers);
 
         model.getRootPackage().accept(visitor);
 
         // Extract results
-        FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = visitor.getResults();
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = visitor.getResults();
 
         projectInfo.setClassCount(results.typeCount);
         projectInfo.setMethodCount(results.methodCount);
@@ -143,7 +143,7 @@ public class NimbaProjectScanner implements ProjectScanner {
         logger.info("Found {} function usages", functionUsages.size());
     }
 
-    private List<FunctionUsage> buildFunctionUsages(FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results) {
+    private List<FunctionUsage> buildFunctionUsages(NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results) {
         List<FunctionUsage> functionUsages = new ArrayList<>();
 
         for (Map.Entry<String, List<FunctionInvocation>> entry : results.functionInvocations.entrySet()) {

@@ -5,7 +5,7 @@ import gov.nystax.nimbus.codesnap.services.scanner.domain.FunctionUsage;
 import gov.nystax.nimbus.codesnap.services.scanner.domain.ProjectInfo;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanContext;
 import gov.nystax.nimbus.codesnap.services.scanner.observability.ScanProgressListener;
-import gov.nystax.nimbus.codesnap.services.scanner.visitor.FunctionOnlyAnalysisVisitor;
+import gov.nystax.nimbus.codesnap.services.scanner.visitor.NimbaFunctionOnlyAnalysisVisitor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import spoon.Launcher;
@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class NimbaProjectScannerTest {
 
-    // ===== FunctionOnlyAnalysisVisitor unit tests =====
+    // ===== NimbaFunctionOnlyAnalysisVisitor unit tests =====
 
     @Test
     void visitor_detectsFunctionInvocations() {
@@ -41,7 +41,7 @@ class NimbaProjectScannerTest {
 
         List<String> functionDeps = List.of("gov.nystax.functions:RetrieveWTPendFiling-func-client:1.0");
 
-        FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
                 "sample/MyProcessor.java", source, functionDeps);
 
         assertThat(results.functionInvocations).hasSize(1);
@@ -72,7 +72,7 @@ class NimbaProjectScannerTest {
                 "gov.nystax.functions:RetrieveWTPendFiling-func-client:1.0",
                 "gov.nystax.functions:UpdateRecord-func-client:2.0");
 
-        FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
                 "sample/MyProcessor.java", source, functionDeps);
 
         assertThat(results.functionInvocations).hasSize(2);
@@ -97,7 +97,7 @@ class NimbaProjectScannerTest {
 
         List<String> functionDeps = List.of("gov.nystax.functions:ScheduleTask-func-client:1.0");
 
-        FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
                 "sample/MyProcessor.java", source, functionDeps);
 
         assertThat(results.functionInvocations).hasSize(1);
@@ -118,7 +118,7 @@ class NimbaProjectScannerTest {
                 }
                 """;
 
-        FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
                 "sample/MyProcessor.java", source, Collections.emptyList());
 
         assertThat(results.functionInvocations).isEmpty();
@@ -141,7 +141,7 @@ class NimbaProjectScannerTest {
                 }
                 """;
 
-        FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
                 "sample/Processor.java", source, Collections.emptyList());
 
         assertThat(results.typeCount).isEqualTo(2);
@@ -167,12 +167,125 @@ class NimbaProjectScannerTest {
                 }
                 """;
 
-        FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
                 "sample/MyService.java", source, Collections.emptyList());
 
         // Visitor should count types but not track service annotations
         assertThat(results.typeCount).isEqualTo(2);
         assertThat(results.functionInvocations).isEmpty();
+    }
+
+    // ===== Direct static call tests (Nimba-style, no .instance()) =====
+
+    @Test
+    void visitor_detectsDirectStaticFunctionInvocations() {
+        String source = """
+                package sample;
+
+                import gov.nystax.nimbus.function.client.RetrieveWTPendFilingFunction;
+
+                class MyProcessor {
+                    void process() {
+                        RetrieveWTPendFilingFunction.execute("input");
+                    }
+                }
+                """;
+
+        List<String> functionDeps = List.of("gov.nystax.functions:RetrieveWTPendFiling-func-client:1.0");
+
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+                "sample/MyProcessor.java", source, functionDeps);
+
+        assertThat(results.functionInvocations).hasSize(1);
+        assertThat(results.functionInvocations).containsKey("retrievewtpendfiling");
+
+        List<FunctionInvocation> invocations = results.functionInvocations.get("retrievewtpendfiling");
+        assertThat(invocations).hasSize(1);
+        assertThat(invocations.getFirst().getInvocationType()).isEqualTo("execute");
+    }
+
+    @Test
+    void visitor_detectsMultipleDirectStaticFunctionTypes() {
+        String source = """
+                package sample;
+
+                import gov.nystax.nimbus.function.client.RetrieveWTPendFilingFunction;
+                import gov.nystax.nimbus.function.client.UpdateRecordFunction;
+
+                class MyProcessor {
+                    void process() {
+                        RetrieveWTPendFilingFunction.execute("input");
+                        UpdateRecordFunction.executeAsync("data");
+                    }
+                }
+                """;
+
+        List<String> functionDeps = List.of(
+                "gov.nystax.functions:RetrieveWTPendFiling-func-client:1.0",
+                "gov.nystax.functions:UpdateRecord-func-client:2.0");
+
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+                "sample/MyProcessor.java", source, functionDeps);
+
+        assertThat(results.functionInvocations).hasSize(2);
+        assertThat(results.functionInvocations).containsKeys("retrievewtpendfiling", "updaterecord");
+        assertThat(results.functionInvocations.get("updaterecord").getFirst().getInvocationType())
+                .isEqualTo("executeAsync");
+    }
+
+    @Test
+    void visitor_detectsDirectStaticExecuteOnOrAfter() {
+        String source = """
+                package sample;
+
+                import gov.nystax.nimbus.function.client.ScheduleTaskFunction;
+
+                class MyProcessor {
+                    void process() {
+                        ScheduleTaskFunction.executeOnOrAfter("input");
+                    }
+                }
+                """;
+
+        List<String> functionDeps = List.of("gov.nystax.functions:ScheduleTask-func-client:1.0");
+
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+                "sample/MyProcessor.java", source, functionDeps);
+
+        assertThat(results.functionInvocations).hasSize(1);
+        assertThat(results.functionInvocations.get("scheduletask").getFirst().getInvocationType())
+                .isEqualTo("executeOnOrAfter");
+    }
+
+    @Test
+    void visitor_detectsMixedInvocationPatterns() {
+        String source = """
+                package sample;
+
+                import gov.nystax.nimbus.function.client.RetrieveWTPendFilingFunction;
+                import gov.nystax.nimbus.function.client.UpdateRecordFunction;
+
+                class MyProcessor {
+                    void process() {
+                        RetrieveWTPendFilingFunction.instance().execute("input");
+                        UpdateRecordFunction.execute("data");
+                    }
+                }
+                """;
+
+        List<String> functionDeps = List.of(
+                "gov.nystax.functions:RetrieveWTPendFiling-func-client:1.0",
+                "gov.nystax.functions:UpdateRecord-func-client:2.0");
+
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+                "sample/MyProcessor.java", source, functionDeps);
+
+        assertThat(results.functionInvocations).hasSize(2);
+        assertThat(results.functionInvocations).containsKeys("retrievewtpendfiling", "updaterecord");
+        assertThat(results.functionInvocations.get("retrievewtpendfiling").getFirst().getInvocationType())
+                .isEqualTo("execute");
+        assertThat(results.functionInvocations.get("updaterecord").getFirst().getInvocationType())
+                .isEqualTo("execute");
     }
 
     // ===== NimbaProjectScanner integration test =====
@@ -204,7 +317,7 @@ class NimbaProjectScannerTest {
                 """;
         Files.writeString(projectDir.resolve("pom.xml"), pomXml);
 
-        // Write Java source that invokes the function
+        // Write Java source that invokes the function (Nimba-style: no .instance())
         Path srcDir = projectDir.resolve("src/main/java/sample");
         Files.createDirectories(srcDir);
         String javaSource = """
@@ -214,7 +327,7 @@ class NimbaProjectScannerTest {
 
                 public class MyProcessor {
                     public void process() {
-                        RetrieveWTPendFilingFunction.instance().execute("input");
+                        RetrieveWTPendFilingFunction.execute("input");
                     }
                 }
                 """;
@@ -238,7 +351,7 @@ class NimbaProjectScannerTest {
         assertThat(projectInfo.getServiceInterface()).isNull();
         assertThat(projectInfo.getServiceImplementation()).isNull();
 
-        // Now run code analysis using FunctionOnlyAnalysisVisitor
+        // Now run code analysis using NimbaFunctionOnlyAnalysisVisitor
         Path srcPath = projectDir.resolve("src/main/java");
         Launcher launcher = new Launcher();
         launcher.addInputResource(srcPath.toString());
@@ -247,11 +360,11 @@ class NimbaProjectScannerTest {
         launcher.getEnvironment().setCommentEnabled(false);
         CtModel model = launcher.buildModel();
 
-        FunctionOnlyAnalysisVisitor visitor = new FunctionOnlyAnalysisVisitor(
+        NimbaFunctionOnlyAnalysisVisitor visitor = new NimbaFunctionOnlyAnalysisVisitor(
                 projectInfo.getFunctionDependencies());
         model.getRootPackage().accept(visitor);
 
-        FunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = visitor.getResults();
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = visitor.getResults();
 
         assertThat(results.functionInvocations).hasSize(1);
         assertThat(results.functionInvocations).containsKey("retrievewtpendfiling");
@@ -261,7 +374,7 @@ class NimbaProjectScannerTest {
 
     // ===== Helper =====
 
-    private FunctionOnlyAnalysisVisitor.FunctionAnalysisResults analyzeSource(
+    private NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults analyzeSource(
             String fileName, String source, List<String> functionDependencies) {
         Launcher launcher = new Launcher();
         launcher.addInputResource(new VirtualFile(source, fileName));
@@ -271,7 +384,7 @@ class NimbaProjectScannerTest {
 
         CtModel model = launcher.buildModel();
 
-        FunctionOnlyAnalysisVisitor visitor = new FunctionOnlyAnalysisVisitor(functionDependencies);
+        NimbaFunctionOnlyAnalysisVisitor visitor = new NimbaFunctionOnlyAnalysisVisitor(functionDependencies);
         model.getRootPackage().accept(visitor);
 
         return visitor.getResults();

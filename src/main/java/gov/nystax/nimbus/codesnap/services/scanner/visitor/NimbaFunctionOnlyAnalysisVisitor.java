@@ -7,6 +7,7 @@ import gov.nystax.nimbus.codesnap.services.scanner.domain.MethodReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spoon.reflect.code.CtInvocation;
+import spoon.reflect.code.CtTypeAccess;
 import spoon.reflect.code.CtVariableAccess;
 import spoon.reflect.declaration.*;
 import spoon.reflect.reference.CtExecutableReference;
@@ -21,9 +22,9 @@ import java.util.regex.Pattern;
  * Lightweight visitor that only detects function invocations from function dependencies.
  * Used for codebases that do not have SmartService/SmartImpl annotations.
  */
-public class FunctionOnlyAnalysisVisitor extends CtScanner {
+public class NimbaFunctionOnlyAnalysisVisitor extends CtScanner {
 
-    private static final Logger logger = LoggerFactory.getLogger(FunctionOnlyAnalysisVisitor.class);
+    private static final Logger logger = LoggerFactory.getLogger(NimbaFunctionOnlyAnalysisVisitor.class);
 
     private static final String FUNCTION_CLASS_SUFFIX = "Function";
     private static final Pattern ARTIFACT_PATTERN = Pattern.compile("(.+)-func-client$");
@@ -48,7 +49,7 @@ public class FunctionOnlyAnalysisVisitor extends CtScanner {
 
     private Map<String, List<CtMethod<?>>> methodToCallers = null;
 
-    public FunctionOnlyAnalysisVisitor(List<String> functionDependencies) {
+    public NimbaFunctionOnlyAnalysisVisitor(List<String> functionDependencies) {
         this.functionDependencies = functionDependencies != null ? functionDependencies : Collections.emptyList();
         buildFunctionClassMappings();
     }
@@ -166,6 +167,16 @@ public class FunctionOnlyAnalysisVisitor extends CtScanner {
                     return true;
                 }
             }
+        } else if (invocation.getTarget() instanceof CtTypeAccess<?> typeAccess) {
+            CtTypeReference<?> accessedType = typeAccess.getAccessedType();
+            if (accessedType != null) {
+                if (functionClassNames.stream()
+                        .anyMatch(str -> str.equalsIgnoreCase(accessedType.getQualifiedName()))) {
+                    return true;
+                } else if (isImpliedFunctionClass(accessedType.getQualifiedName())) {
+                    return true;
+                }
+            }
         }
 
         return false;
@@ -226,6 +237,9 @@ public class FunctionOnlyAnalysisVisitor extends CtScanner {
         } else if (invocation.getTarget() instanceof CtVariableAccess<?> varAccess) {
             CtTypeReference<?> varType = varAccess.getType();
             return varType != null ? varType.getQualifiedName() : null;
+        } else if (invocation.getTarget() instanceof CtTypeAccess<?> typeAccess) {
+            CtTypeReference<?> accessedType = typeAccess.getAccessedType();
+            return accessedType != null ? accessedType.getQualifiedName() : null;
         }
         return null;
     }

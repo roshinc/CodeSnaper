@@ -288,6 +288,52 @@ class NimbaProjectScannerTest {
                 .isEqualTo("execute");
     }
 
+    @Test
+    void visitor_ignoresStaticImportWithoutFunctionTarget() {
+        String source = """
+                package sample;
+
+                import static gov.nystax.nimbus.function.client.RetrieveWTPendFilingFunction.execute;
+
+                class MyProcessor {
+                    void process() {
+                        execute("input");
+                    }
+                }
+                """;
+
+        List<String> functionDeps = List.of("gov.nystax.functions:RetrieveWTPendFiling-func-client:1.0");
+
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+                "sample/MyProcessor.java", source, functionDeps);
+
+        assertThat(results.functionInvocations).isEmpty();
+    }
+
+    @Test
+    void visitor_ignoresDirectStaticCallsOnNonFunctionClasses() {
+        String source = """
+                package sample;
+
+                class Utility {
+                    static void execute(String input) {}
+                }
+
+                class MyProcessor {
+                    void process() {
+                        Utility.execute("input");
+                    }
+                }
+                """;
+
+        List<String> functionDeps = List.of("gov.nystax.functions:RetrieveWTPendFiling-func-client:1.0");
+
+        NimbaFunctionOnlyAnalysisVisitor.FunctionAnalysisResults results = analyzeSource(
+                "sample/MyProcessor.java", source, functionDeps);
+
+        assertThat(results.functionInvocations).isEmpty();
+    }
+
     // ===== NimbaProjectScanner integration test =====
 
     @Test

@@ -168,6 +168,9 @@ public class NimbaFunctionOnlyAnalysisVisitor extends CtScanner {
                 }
             }
         } else if (invocation.getTarget() instanceof CtTypeAccess<?> typeAccess) {
+            if (typeAccess.isImplicit()) {
+                return false;
+            }
             CtTypeReference<?> accessedType = typeAccess.getAccessedType();
             if (accessedType != null) {
                 if (functionClassNames.stream()
@@ -238,6 +241,9 @@ public class NimbaFunctionOnlyAnalysisVisitor extends CtScanner {
             CtTypeReference<?> varType = varAccess.getType();
             return varType != null ? varType.getQualifiedName() : null;
         } else if (invocation.getTarget() instanceof CtTypeAccess<?> typeAccess) {
+            if (typeAccess.isImplicit()) {
+                return null;
+            }
             CtTypeReference<?> accessedType = typeAccess.getAccessedType();
             return accessedType != null ? accessedType.getQualifiedName() : null;
         }

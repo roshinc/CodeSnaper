@@ -206,7 +206,7 @@ public final class CodeSnapperConfig {
                 logger.warn(msg);
                 validationErrors.add(msg);
             }
-            if (mavenHomePath != null && !Files.isDirectory(mavenHomePath)) {
+            if (resolveMavenClasspath && mavenHomePath != null && !Files.isDirectory(mavenHomePath)) {
                 msg = "Maven home path does not exist: " + mavenHomePath;
                 logger.warn(msg);
                 validationErrors.add(msg);

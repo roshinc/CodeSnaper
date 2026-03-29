@@ -181,6 +181,23 @@ class DefaultCodeSnapperTest {
         assertThat(exception).hasMessageContaining("Maven home path does not exist");
     }
 
+    @Test
+    void config_ignoresMissingMavenHomePathWhenMavenClasspathResolutionIsDisabled() {
+        Path missingMavenHome = tempDir.resolve("missing-maven-home");
+
+        CodeSnapperConfig config = CodeSnapperConfig.builder()
+                .serviceId("sample-service")
+                .commitHash("abc123")
+                .gitGroups(List.of("sample-group"))
+                .gitToken("token")
+                .localTempRootPath(tempDir)
+                .mavenHomePath(missingMavenHome)
+                .build();
+
+        assertThat(config.resolveMavenClasspath()).isFalse();
+        assertThat(config.mavenHomePath()).isEqualTo(missingMavenHome);
+    }
+
     private CodeSnapperConfig testConfig() {
         return CodeSnapperConfig.builder()
                 .serviceId("sample-service")
